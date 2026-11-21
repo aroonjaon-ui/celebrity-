@@ -38,7 +38,6 @@ const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.PORT || 3000);
 const DATA_DIR = path.resolve(__dirname, 'data');
 const STORE_PATH = path.join(DATA_DIR, 'store.json');
-const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
 const RECEIPT_SECRET =
   process.env.PAYMENT_RECEIPT_SECRET && process.env.PAYMENT_RECEIPT_SECRET.length >= 16
@@ -195,9 +194,6 @@ function resolveEscrowPercent(talent: Talent): number {
   }
   return store.adminSettings.escrowFeePercent;
 }
-
-fs.mkdirSync(DATA_DIR, { recursive: true });
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 interface StoreData {
   talents: Talent[];
