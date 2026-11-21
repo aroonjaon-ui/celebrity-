@@ -20,6 +20,16 @@ import type {
   UserAccountProfile,
 } from '../types.ts';
 
+async function readJsonResponse(res: Response): Promise<any> {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text.slice(0, 200) || 'Request failed.' };
+  }
+}
+
 interface PresenceInfo {
   totalConnected: number;
   clientsOnline: number;
@@ -381,7 +391,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         const res = await fetch('/api/bootstrap');
         if (!res.ok) return;
-        const data = await res.json();
+        const data = await readJsonResponse(res);
         if (!active) return;
         setTalents(data.talents || []);
         setClientProfile(data.clientProfile || null);
@@ -465,7 +475,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Admin login failed.');
       setIsAdmin(true);
       setWorkspace({ role: 'admin', displayName: 'Platform Admin' });
@@ -477,7 +487,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const adminLogout = useCallback(async () => {
     const res = await fetch('/api/admin/logout', { method: 'POST' });
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Admin logout failed.');
     setIsAdmin(false);
     setWorkspace({ role: 'client', displayName: clientProfile?.contactName || 'Jordan Reyes' });
@@ -492,7 +502,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Could not create account.');
       setIsAuthenticated(true);
       setHasClientAccount(true);
@@ -512,7 +522,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Could not log in.');
       setIsAuthenticated(true);
       setHasClientAccount(true);
@@ -526,7 +536,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const logout = useCallback(async () => {
     const res = await fetch('/api/auth/logout', { method: 'POST' });
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Could not log out.');
     setIsAuthenticated(false);
     setWorkspace({ role: 'client', displayName: 'Jordan Reyes' });
@@ -540,7 +550,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Could not save admin settings.');
     setAdminSettings(data.adminSettings);
     setEscrowDepositInfo(data.escrowDepositInfo);
@@ -549,7 +559,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const getEscrowAccount = useCallback(async (): Promise<AdminEscrowAccount> => {
     const res = await fetch('/api/admin/escrow-account');
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Could not load escrow account.');
     return data.escrowAccount as AdminEscrowAccount;
   }, []);
@@ -560,7 +570,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Could not save escrow account.');
     setEscrowDepositInfo(data.escrowDepositInfo);
     pushToast('Deposit Details Saved', 'Bank deposit instructions updated.', 'success');
@@ -573,7 +583,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...input, sessionId: sessionId, idempotencyKey: `dep-${sessionId}-${Date.now()}` }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Could not submit deposit.');
       pushToast('Deposit Submitted', 'Your deposit is awaiting admin approval.', 'info');
       return data.booking as Booking;
@@ -583,7 +593,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const getAdminDeposits = useCallback(async (status = ''): Promise<AdminDepositItem[]> => {
     const res = await fetch(`/api/admin/deposits${status ? `?status=${encodeURIComponent(status)}` : ''}`);
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Could not load deposits.');
     return data.deposits as AdminDepositItem[];
   }, []);
@@ -595,7 +605,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cardImageUrl }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Could not approve deposit.');
       pushToast('Deposit Approved', 'The client has been notified.', 'success');
     },
@@ -609,7 +619,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Could not reject deposit.');
       pushToast('Deposit Rejected', 'The client has been notified.', 'info');
     },
@@ -623,7 +633,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cardImageUrl }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Could not upload Fan Card image.');
       setFanCards((prev) => prev.map((c) => (c.id === data.fanCard.id ? data.fanCard : c)));
       pushToast('Card Image Saved', 'Official Fan Card image uploaded.', 'success');
@@ -638,7 +648,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Could not create celebrity.');
       setTalents((prev) => [data.talent, ...prev]);
       pushToast('Celebrity Added', `${data.talent.name} is now on the roster.`, 'success');
@@ -653,7 +663,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Could not update celebrity.');
     setTalents((prev) => prev.map((t) => (t.id === data.talent.id ? data.talent : t)));
     pushToast('Celebrity Saved', 'Profile changes are live.', 'success');
@@ -667,7 +677,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ archived }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Could not update celebrity archive state.');
       setTalents((prev) => prev.map((t) => (t.id === data.talent.id ? data.talent : t)));
     },
@@ -687,7 +697,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const errorData = await res.json().catch(() => ({}));
             throw new Error(errorData.error || 'Could not send admin message.');
           }
-          const data = await res.json();
+          const data = await readJsonResponse(res);
           if (data.message) {
             const message = data.message as ChatMessage;
             setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
@@ -714,7 +724,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           body: JSON.stringify({ threadId }),
         });
         if (!res.ok) return;
-        const data = await res.json();
+        const data = await readJsonResponse(res);
         if (data.thread) {
           const thread = data.thread as ChatThread;
           setThreads((prev) => mergeChatThread(prev, thread));
@@ -731,7 +741,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Failed to update celebrity profile.');
     setTalents((prev) => prev.map((t) => (t.id === data.talent.id ? data.talent : t)));
     return data.talent;
@@ -754,7 +764,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         dataBase64,
       }),
     });
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Media upload failed.');
     return data;
   }, []);
@@ -765,7 +775,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Failed to update client profile.');
     setClientProfile(data.clientProfile);
     return data.clientProfile;
@@ -778,7 +788,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Failed to update account settings.');
       setUserAccount(data.userAccount);
       setWorkspace((prev) =>
@@ -795,7 +805,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ currentPassword, newPassword }),
     });
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Failed to update password.');
   }, []);
 
@@ -806,7 +816,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ talentId, dates, status, sessionId, note }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Failed to update calendar availability.');
       setAvailability(data.availability);
     },
@@ -829,7 +839,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...input, sessionId }),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Could not submit booking inquiry.');
       return data as { booking: Booking; threadId: string };
     },
@@ -842,7 +852,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ decision, decisionNote }),
     });
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Could not process inquiry decision.');
     setBookings((prev) => prev.map((b) => (b.id === data.booking.id ? data.booking : b)));
     return data.booking as Booking;
@@ -857,7 +867,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const res = await fetch(`/api/bookings/${encodeURIComponent(bookingId)}/cancel`, {
       method: 'POST',
     });
-    const data = await res.json();
+    const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Failed to cancel booking.');
     setBookings((prev) => prev.map((b) => (b.id === data.booking.id ? data.booking : b)));
   }, []);
@@ -878,7 +888,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Unable to submit Fan Card deposit.');
       setFanCards((prev) => (prev.some((c) => c.id === data.fanCard.id) ? prev : [data.fanCard, ...prev]));
       pushToast('Fan Card Request Submitted', 'Your deposit is awaiting admin approval.', 'info');
@@ -902,7 +912,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       });
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (!res.ok) throw new Error(data.error || 'Could not submit review.');
       setReviews((prev) => (prev.some((r) => r.id === data.review.id) ? prev : [data.review, ...prev]));
       return data.review as ClientReview;
@@ -930,7 +940,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const errorData = await res.json().catch(() => ({}));
             throw new Error(errorData.error || 'Could not send message.');
           }
-          const data = await res.json();
+          const data = await readJsonResponse(res);
           if (data.message) {
             const message = data.message as ChatMessage;
             setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
@@ -961,7 +971,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           body: JSON.stringify({ threadId, role }),
         });
         if (!res.ok) return;
-        const data = await res.json();
+        const data = await readJsonResponse(res);
         if (data.thread) {
           const thread = data.thread as ChatThread;
           setThreads((prev) => mergeChatThread(prev, thread));
@@ -979,7 +989,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       body: JSON.stringify({ id }),
     });
     if (res.ok) {
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       setNotifications(data.notifications || []);
     }
   }, []);

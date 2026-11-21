@@ -14,6 +14,10 @@ on conflict (id) do nothing;
 
 alter table public.app_state enable row level security;
 
+-- The service role must have explicit table grants in this project.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on public.app_state to service_role;
+
 -- Admin login credentials. Password is a scrypt hash in salt:hex format.
 create table if not exists public.admin_users (
   id text primary key,
@@ -24,6 +28,7 @@ create table if not exists public.admin_users (
 );
 
 alter table public.admin_users enable row level security;
+grant select, insert, update, delete on public.admin_users to service_role;
 
 -- Default admin: admin@mercersterling.com / admin123
 -- Hash format: <salt>:<scrypt-hex>. Replace password_hash to change the password.
