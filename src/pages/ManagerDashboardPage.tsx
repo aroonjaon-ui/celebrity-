@@ -31,6 +31,9 @@ const fanCardStateFor = (fc: FanCard): FanCardState => {
   return { label: 'Awaiting activation', badgeClass: 'bg-zinc-100 text-zinc-600', active: false };
 };
 
+const hasKycDocumentOnFile = (kyc: UserAccountProfile['kyc'] | undefined): boolean =>
+  Boolean(kyc?.documentFileUrl);
+
 export const ManagerDashboardPage: React.FC = () => {
   const {
     userAccount,
@@ -91,6 +94,9 @@ export const ManagerDashboardPage: React.FC = () => {
     (fc) => fc.approvalStatus === 'pending_review' || fc.paymentStatus === 'submitted',
   );
 
+  const hasKycDocument = hasKycDocumentOnFile(userAccount?.kyc);
+  const kycVerified = userAccount?.kyc.status === 'verified' && hasKycDocument;
+
   useEffect(() => {
     if (!userAccount) return;
     setFullName(userAccount.fullName);
@@ -131,6 +137,14 @@ export const ManagerDashboardPage: React.FC = () => {
     setFormError('');
     setSaving(true);
     try {
+      const kycDetailsChanged =
+        Boolean(kycDocumentNumber.trim()) ||
+        legalName !== userAccount?.kyc.legalName ||
+        documentType !== userAccount?.kyc.documentType ||
+        documentExpiry !== userAccount?.kyc.documentExpiry ||
+        issuingCountry !== userAccount?.kyc.issuingCountry ||
+        (documentFileUrl || undefined) !== userAccount?.kyc.documentFileUrl;
+      const nextKycStatus = kycDetailsChanged ? 'pending_review' : userAccount?.kyc.status || 'unverified';
       await updateUserAccount({
         fullName,
         username,
@@ -145,7 +159,7 @@ export const ManagerDashboardPage: React.FC = () => {
         twoFactorEnabled: overrideTwoFactor !== undefined ? overrideTwoFactor : twoFactorEnabled,
         kycDocumentNumber: kycDocumentNumber.trim() || undefined,
         kyc: {
-          status: userAccount?.kyc.status || 'verified',
+          status: nextKycStatus,
           legalName,
           documentType,
           documentNumberMasked: userAccount?.kyc.documentNumberMasked || '•••• 0000',
@@ -224,12 +238,13 @@ export const ManagerDashboardPage: React.FC = () => {
     .map((p) => p[0]?.toUpperCase() || '')
     .join('');
 
-  const kycLabel =
-    userAccount?.kyc.status === 'verified'
+  const kycLabel = !hasKycDocument
+    ? 'Not verified'
+    : userAccount?.kyc.status === 'verified'
       ? 'Verified'
       : userAccount?.kyc.status === 'pending_review'
         ? 'Pending Review'
-        : 'Incomplete';
+        : 'Not verified';
 
   const navItems: Array<{ id: SettingsTab; label: string; count?: number; icon: React.ReactNode }> = [
     { id: 'profile', label: 'Personal & Signup', icon: <User className="w-4 h-4" /> },
@@ -299,7 +314,7 @@ export const ManagerDashboardPage: React.FC = () => {
             Identity (KYC)
           </p>
           <p className="mt-1 font-display text-lg font-bold text-zinc-950 inline-flex items-center gap-1.5">
-            {userAccount?.kyc.status === 'verified' && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+            {kycVerified && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
             <span>{kycLabel}</span>
           </p>
           <p className="mt-0.5 font-mono text-[11px] text-zinc-500">
@@ -571,8 +586,16 @@ export const ManagerDashboardPage: React.FC = () => {
                     Identity records required for protected escrow bookings and Official Fan Card issuance.
                   </p>
                 </div>
-                <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-                  <CheckCircle2 className="w-4 h-4" />
+                <div
+                  className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
+                    kycVerified
+                      ? 'text-emerald-700'
+                      : hasKycDocument && userAccount?.kyc.status === 'pending_review'
+                        ? 'text-amber-700'
+                        : 'text-zinc-500'
+                  }`}
+                >
+                  {kycVerified && <CheckCircle2 className="w-4 h-4" />}
                   <span>{kycLabel}</span>
                 </div>
               </div>
@@ -585,13 +608,15 @@ export const ManagerDashboardPage: React.FC = () => {
                   </div>
                   <div className="sm:col-span-8 flex items-center justify-between gap-4">
                     <span className="text-xs font-semibold text-zinc-950 inline-flex items-center gap-1.5">
-                      {userAccount?.kyc.status === 'verified' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+                      {kycVerified && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
                       <span>{kycLabel}</span>
                     </span>
                     <span className="font-mono tabular-nums text-[11px] text-zinc-500">
                       {userAccount?.kyc.submittedAt
                         ? `Submitted ${new Date(userAccount.kyc.submittedAt).toLocaleDateString()}`
-                        : 'On file'}
+                        : hasKycDocument
+                          ? 'On file'
+                          : 'No document on file'}
                     </span>
                   </div>
                 </li>

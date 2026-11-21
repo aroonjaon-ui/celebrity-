@@ -157,17 +157,6 @@ export const AuthPage: React.FC<{ mode: 'login' | 'signup' }> = ({ mode }) => {
             {busy ? 'Please wait…' : activeMode === 'signup' ? 'Create account' : 'Log in'}
           </button>
         </form>
-
-        <div className="mt-6 pt-5 border-t border-zinc-200 text-center">
-          <p className="text-[11px] text-zinc-500 mb-2">Need admin access?</p>
-          <button
-            type="button"
-            onClick={() => navigate('/admin')}
-            className="w-full py-2.5 text-xs font-semibold text-zinc-700 bg-zinc-50 border border-zinc-200 rounded-xl hover:border-zinc-950 hover:text-zinc-950 cursor-pointer transition-colors"
-          >
-            Open Admin Portal
-          </button>
-        </div>
       </div>
     </div>
   );

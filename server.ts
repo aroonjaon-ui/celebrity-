@@ -147,10 +147,12 @@ function isClientRequest(req: { headers: { cookie?: string } }): boolean {
   return true;
 }
 
-function setClientSession(res: express.Response): string {
+function setClientSession(res: express.Response, email?: string): string {
   const token = crypto.randomBytes(32).toString('hex');
   store.clientSessions = store.clientSessions || {};
   store.clientSessions[token] = Date.now() + CLIENT_SESSION_MS;
+  store.clientSessionEmails = store.clientSessionEmails || {};
+  if (email) store.clientSessionEmails[token] = email.trim().toLowerCase();
   res.setHeader(
     'Set-Cookie',
     `ms_client=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(CLIENT_SESSION_MS / 1000)}`
@@ -167,6 +169,27 @@ function setAdminSession(res: express.Response): string {
     `ms_admin=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(ADMIN_SESSION_MS / 1000)}`
   );
   return token;
+}
+
+function clientEmailForRequest(req: { headers: { cookie?: string } }): string {
+  const token = parseCookies(req.headers.cookie).ms_client;
+  if (!token) return '';
+  const expires = store.clientSessions?.[token];
+  if (!expires || expires < Date.now()) return '';
+  return store.clientSessionEmails?.[token] || '';
+}
+
+function accountRecordForRequest(req: { headers: { cookie?: string } }): StoredUserAccount | undefined {
+  const email = clientEmailForRequest(req);
+  return email ? store.userAccounts?.find((a) => a.email === email) : undefined;
+}
+
+function syncAccountSnapshot(email: string): void {
+  if (!email) return;
+  const record = store.userAccounts?.find((a) => a.email === email);
+  if (!record) return;
+  record.userAccount = store.userAccount;
+  record.clientProfile = store.clientProfile;
 }
 
 function escrowSnapshot(account: AdminEscrowAccount): EscrowAccountSnapshot {
@@ -195,6 +218,13 @@ function resolveEscrowPercent(talent: Talent): number {
   return store.adminSettings.escrowFeePercent;
 }
 
+interface StoredUserAccount {
+  email: string;
+  passwordHash: string;
+  userAccount: UserAccountProfile;
+  clientProfile: ClientProfile;
+}
+
 interface StoreData {
   talents: Talent[];
   clientProfile: ClientProfile;
@@ -211,6 +241,8 @@ interface StoreData {
   processedIdempotencyKeys: Record<string, string>;
   adminSessions?: Record<string, number>;
   clientSessions?: Record<string, number>;
+  clientSessionEmails?: Record<string, string>;
+  userAccounts?: StoredUserAccount[];
 }
 
 function isoDateOffset(daysFromToday: number): string {
@@ -909,6 +941,53 @@ function normalizeStore(parsed: StoreData): StoreData {
   parsed.processedIdempotencyKeys = parsed.processedIdempotencyKeys || {};
   parsed.adminSessions = parsed.adminSessions || {};
   parsed.clientSessions = parsed.clientSessions || {};
+  parsed.clientSessionEmails = parsed.clientSessionEmails || {};
+  parsed.userAccounts = Array.isArray(parsed.userAccounts) ? parsed.userAccounts : [];
+  if (parsed.userAccounts.length === 0 && parsed.userPasswordHash) {
+    parsed.userAccounts.push({
+      email: parsed.userAccount.email,
+      passwordHash: parsed.userPasswordHash,
+      userAccount: parsed.userAccount,
+      clientProfile: parsed.clientProfile,
+    });
+  }
+  const normalizeKyc = (account: UserAccountProfile): void => {
+    if (account?.kyc && !account.kyc.documentFileUrl && account.kyc.status === 'verified') {
+      account.kyc.status = 'unverified';
+      account.kyc.documentNumberMasked = '';
+      account.kyc.submittedAt = undefined;
+    }
+  };
+  normalizeKyc(parsed.userAccount);
+  for (const record of parsed.userAccounts) {
+    if (!record.email || !record.passwordHash || !record.userAccount) continue;
+    record.email = record.email.trim().toLowerCase();
+    record.userAccount = record.userAccount || { ...initial.userAccount, email: record.email };
+    record.clientProfile = record.clientProfile || { ...initial.clientProfile, contactEmail: record.email };
+    normalizeKyc(record.userAccount);
+  }
+
+  const nowMs = Date.now();
+  for (const [token, expires] of Object.entries(parsed.clientSessions)) {
+    if (expires < nowMs) {
+      delete parsed.clientSessions[token];
+      delete parsed.clientSessionEmails![token];
+    }
+  }
+
+  if (!parsed.threads.some((thread) => thread.id === 'support-thread')) {
+    parsed.threads.unshift({
+      id: 'support-thread',
+      talentId: 'support',
+      clientCompany: 'Live Support',
+      subject: 'Live Support',
+      lastMessageAt: new Date(nowMs).toISOString(),
+      lastMessagePreview: '',
+      unreadForClient: 0,
+      unreadForManager: 0,
+      unreadForAdmin: 0,
+    });
+  }
 
   if (!parsed.adminSettings) {
     parsed.adminSettings = initial.adminSettings;
@@ -974,6 +1053,7 @@ async function ensureState(): Promise<void> {
     const remote = await readSupabaseState();
     if (remote) {
       store = normalizeStore(remote);
+      saveStore(store);
       return;
     }
     const seeded = normalizeStore(JSON.parse(JSON.stringify(seedStore)) as StoreData);
@@ -991,10 +1071,11 @@ async function ensureState(): Promise<void> {
   }
 }
 
-async function flushStore(): Promise<void> {
+async function flushStore(activeEmail?: string): Promise<void> {
   if (!stateDirty) return;
   stateDirty = false;
   try {
+    syncAccountSnapshot(activeEmail || '');
     await writeSupabaseState(store);
   } catch (err) {
     stateDirty = true;
@@ -1031,11 +1112,19 @@ export async function createApiApp(): Promise<express.Express> {
   function broadcast(_event: string, _payload: unknown, _exclude?: unknown): void {}
   function broadcastPresence(): void {}
 
-  // Flush Supabase writes before every JSON response.
-  app.use((_req, res, next) => {
+  // Sync the active account snapshot for the session, then flush Supabase writes
+  // before every JSON response. This keeps the existing route handlers unchanged
+  // while allowing multiple independent client accounts.
+  app.use((req, res, next) => {
+    const email = clientEmailForRequest(req);
+    const record = email ? store.userAccounts?.find((a) => a.email === email) : undefined;
+    if (record) {
+      store.userAccount = record.userAccount;
+      store.clientProfile = record.clientProfile;
+    }
     const originalJson = res.json.bind(res);
     (res as express.Response & { json: (body?: unknown) => express.Response }).json = ((body?: unknown) => {
-      void flushStore()
+      void flushStore((req as express.Request & { activeClientEmail?: string }).activeClientEmail || email)
         .then(() => originalJson(body))
         .catch((err) => {
           console.error('Failed to persist state:', err);
@@ -1123,7 +1212,7 @@ export async function createApiApp(): Promise<express.Express> {
       escrowDepositInfo: escrowSnapshot(store.adminSettings.escrowAccount),
       isAdmin: isAdminRequest(req),
       isAuthenticated: isClientRequest(req),
-      hasClientAccount: Boolean(store.userPasswordHash),
+      hasClientAccount: false,
     });
   });
 
@@ -1212,6 +1301,66 @@ export async function createApiApp(): Promise<express.Express> {
     res.status(201).json({ message, thread });
   });
 
+  // Live support chat shared by visitors and answered from the admin portal.
+  app.post('/api/support/message', (req, res) => {
+    const { body, senderName, senderEmail } = req.body as {
+      body?: string;
+      senderName?: string;
+      senderEmail?: string;
+    };
+    const cleanBody = typeof body === 'string' ? body.trim().slice(0, 2000) : '';
+    if (!cleanBody) {
+      res.status(400).json({ error: 'Message cannot be empty.' });
+      return;
+    }
+
+    let thread = store.threads.find((t) => t.id === 'support-thread');
+    if (!thread) {
+      thread = {
+        id: 'support-thread',
+        talentId: 'support',
+        clientCompany: 'Live Support',
+        subject: 'Live Support',
+        lastMessageAt: new Date().toISOString(),
+        lastMessagePreview: '',
+        unreadForClient: 0,
+        unreadForManager: 0,
+        unreadForAdmin: 0,
+      };
+      store.threads.unshift(thread);
+    }
+
+    const cleanSenderName =
+      typeof senderName === 'string' && senderName.trim()
+        ? senderName.trim().slice(0, 80)
+        : store.clientProfile.contactName || 'Website Visitor';
+    const message: ChatMessage = {
+      id: `msg-${crypto.randomUUID().slice(0, 8)}`,
+      threadId: thread.id,
+      senderRole: 'client',
+      senderName: cleanSenderName,
+      body: cleanBody,
+      createdAt: new Date().toISOString(),
+    };
+    store.messages.push(message);
+    thread.lastMessageAt = message.createdAt;
+    thread.lastMessagePreview = cleanBody.slice(0, 110);
+    thread.unreadForAdmin = (thread.unreadForAdmin || 0) + 1;
+
+    store.notifications.unshift({
+      id: `notif-${crypto.randomUUID().slice(0, 8)}`,
+      recipientRole: 'admin',
+      title: `Live support message from ${cleanSenderName}${senderEmail ? ` (${senderEmail})` : ''}`,
+      message: cleanBody.slice(0, 120),
+      category: 'message',
+      createdAt: message.createdAt,
+      read: false,
+    });
+
+    saveStore(store);
+    res.status(201).json({ message, thread });
+  });
+
   app.post('/api/chat/read', (req, res) => {
     const { threadId, role } = req.body as { threadId?: string; role?: string };
     const thread = store.threads.find((t) => t.id === threadId);
@@ -1262,7 +1411,11 @@ export async function createApiApp(): Promise<express.Express> {
       res.status(400).json({ error: 'A thread or celebrity is required.' });
       return;
     }
-    const talent = store.talents.find((t) => t.id === thread!.talentId);
+    const talent =
+      store.talents.find((t) => t.id === thread!.talentId) ||
+      (thread!.talentId === 'support'
+        ? ({ id: 'support', name: 'Live Support', representationManager: 'Live Support' } as unknown as Talent)
+        : undefined);
     if (!talent) {
       res.status(404).json({ error: 'Celebrity not found.' });
       return;
@@ -1340,7 +1493,8 @@ export async function createApiApp(): Promise<express.Express> {
     res.json({ isAdmin: isAdminRequest(req) });
   });
 
-  // Client account signup / login / logout
+  // Client account signup / login / logout. Multiple accounts are supported;
+  // each session points at its own stored account snapshot.
   app.post('/api/auth/signup', (req, res) => {
     const { fullName, email, password, companyName } = req.body as {
       fullName?: string;
@@ -1362,36 +1516,59 @@ export async function createApiApp(): Promise<express.Express> {
       res.status(400).json({ error: 'Password must be at least 8 characters.' });
       return;
     }
-    if (store.userPasswordHash) {
-      res.status(409).json({ error: 'An account already exists. Please log in instead.' });
+    if (store.userAccounts?.some((account) => account.email === cleanEmail)) {
+      res.status(409).json({ error: 'An account with this email already exists. Please log in instead.' });
       return;
     }
 
     const nowIso = new Date().toISOString();
-    store.userPasswordHash = hashPassword(password);
-    store.userAccount = {
-      ...store.userAccount,
+    const template = createInitialStore();
+    const newAccount: UserAccountProfile = {
+      ...template.userAccount,
       fullName: cleanName,
       email: cleanEmail,
       username: cleanEmail.split('@')[0],
+      signupDate: nowIso.slice(0, 10),
+      lastLoginAt: nowIso,
+      twoFactorEnabled: false,
+      kyc: {
+        ...template.userAccount.kyc,
+        status: 'unverified',
+        legalName: cleanName,
+        documentNumberMasked: '',
+        submittedAt: undefined,
+        documentFileUrl: undefined,
+      },
       updatedAt: nowIso,
     };
-    store.clientProfile = {
-      ...store.clientProfile,
+    const newClientProfile: ClientProfile = {
+      ...template.clientProfile,
       contactName: cleanName,
       contactEmail: cleanEmail,
       companyName:
         typeof companyName === 'string' && companyName.trim()
           ? companyName.trim().slice(0, 120)
-          : store.clientProfile.companyName,
+          : template.clientProfile.companyName,
     };
-    setClientSession(res);
+    const record: StoredUserAccount = {
+      email: cleanEmail,
+      passwordHash: hashPassword(password),
+      userAccount: newAccount,
+      clientProfile: newClientProfile,
+    };
+    store.userAccounts = store.userAccounts || [];
+    store.userAccounts.push(record);
+    if (!store.userPasswordHash) store.userPasswordHash = record.passwordHash;
+    store.userAccount = newAccount;
+    store.clientProfile = newClientProfile;
+    setClientSession(res, cleanEmail);
+    (req as express.Request & { activeClientEmail?: string }).activeClientEmail = cleanEmail;
     saveStore(store);
     broadcast('user:updated', store.userAccount);
     broadcast('client-profile:updated', store.clientProfile);
     res.status(201).json({
       authenticated: true,
-      hasClientAccount: true,
+      hasClientAccount: false,
       userAccount: store.userAccount,
       clientProfile: store.clientProfile,
     });
@@ -1400,33 +1577,41 @@ export async function createApiApp(): Promise<express.Express> {
   app.post('/api/auth/login', (req, res) => {
     const { email, password } = req.body as { email?: string; password?: string };
     const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
-    if (!store.userPasswordHash) {
-      res.status(404).json({ error: 'No account found. Please sign up first.' });
-      return;
-    }
-    if (cleanEmail !== store.userAccount.email.trim().toLowerCase() || !verifyPassword(password || '', store.userPasswordHash)) {
+    const record = store.userAccounts?.find((account) => account.email === cleanEmail);
+    if (!record) {
       res.status(401).json({ error: 'Incorrect email or password.' });
       return;
     }
-    store.userAccount.lastLoginAt = new Date().toISOString();
-    setClientSession(res);
+    if (!verifyPassword(password || '', record.passwordHash)) {
+      res.status(401).json({ error: 'Incorrect email or password.' });
+      return;
+    }
+    record.userAccount.lastLoginAt = new Date().toISOString();
+    store.userAccount = record.userAccount;
+    store.clientProfile = record.clientProfile;
+    setClientSession(res, cleanEmail);
+    (req as express.Request & { activeClientEmail?: string }).activeClientEmail = cleanEmail;
     saveStore(store);
-    res.json({ authenticated: true, hasClientAccount: true, userAccount: store.userAccount });
+    res.json({ authenticated: true, hasClientAccount: false, userAccount: store.userAccount });
   });
 
   app.post('/api/auth/logout', (req, res) => {
     const token = parseCookies(req.headers.cookie).ms_client;
-    if (token && store.clientSessions) delete store.clientSessions[token];
+    if (token) {
+      if (store.clientSessions) delete store.clientSessions[token];
+      if (store.clientSessionEmails) delete store.clientSessionEmails[token];
+    }
     saveStore(store);
     res.setHeader('Set-Cookie', 'ms_client=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
     res.json({ authenticated: false });
   });
 
   app.get('/api/auth/session', (req, res) => {
+    const account = accountRecordForRequest(req);
     res.json({
-      authenticated: isClientRequest(req),
-      hasClientAccount: Boolean(store.userPasswordHash),
-      userAccount: store.userAccount,
+      authenticated: isClientRequest(req) && Boolean(account),
+      hasClientAccount: false,
+      userAccount: account?.userAccount,
     });
   });
 
@@ -2997,7 +3182,7 @@ export async function createApiApp(): Promise<express.Express> {
         docFileUrl !== nextKyc.documentFileUrl;
 
       nextKyc = {
-        status: kycChanged ? 'verified' : nextKyc.status,
+        status: kycChanged ? 'pending_review' : nextKyc.status,
         legalName,
         documentType: docType,
         documentNumberMasked: maskedNumber,
@@ -3037,6 +3222,19 @@ export async function createApiApp(): Promise<express.Express> {
       updatedAt: new Date().toISOString(),
     };
 
+    const activeRecord = accountRecordForRequest(req);
+    if (activeRecord) {
+      const previousEmail = activeRecord.email;
+      activeRecord.email = nextEmail.trim().toLowerCase();
+      activeRecord.userAccount = store.userAccount;
+      activeRecord.clientProfile = store.clientProfile;
+      if (previousEmail !== activeRecord.email) {
+        const token = parseCookies(req.headers.cookie).ms_client;
+        if (token && store.clientSessionEmails) store.clientSessionEmails[token] = activeRecord.email;
+        (req as express.Request & { activeClientEmail?: string }).activeClientEmail = activeRecord.email;
+      }
+    }
+
     saveStore(store);
     broadcast('user:updated', store.userAccount);
     res.json({ userAccount: store.userAccount });
@@ -3048,8 +3246,9 @@ export async function createApiApp(): Promise<express.Express> {
       currentPassword?: string;
       newPassword?: string;
     };
+    const record = accountRecordForRequest(req);
 
-    if (typeof currentPassword !== 'string' || !verifyPassword(currentPassword, store.userPasswordHash)) {
+    if (!record || typeof currentPassword !== 'string' || !verifyPassword(currentPassword, record.passwordHash)) {
       res.status(401).json({ error: 'Current password is incorrect.' });
       return;
     }
@@ -3058,7 +3257,8 @@ export async function createApiApp(): Promise<express.Express> {
       return;
     }
 
-    store.userPasswordHash = hashPassword(newPassword);
+    record.passwordHash = hashPassword(newPassword);
+    store.userPasswordHash = record.passwordHash;
     store.userAccount.updatedAt = new Date().toISOString();
 
     saveStore(store);

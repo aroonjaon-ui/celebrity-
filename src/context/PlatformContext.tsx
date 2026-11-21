@@ -186,6 +186,7 @@ interface PlatformContextValue {
     comment: string;
   }) => Promise<ClientReview>;
   sendChatMessage: (input: { threadId?: string; talentId?: string; body: string }) => void;
+  sendSupportMessage: (input: { body: string; senderName?: string; senderEmail?: string }) => Promise<void>;
   sendTyping: (threadId: string, isTyping: boolean) => void;
   markThreadRead: (threadId: string) => void;
   markNotificationRead: (id: string | 'all') => Promise<void>;
@@ -958,6 +959,36 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [pushToast]
   );
 
+  const sendSupportMessage = useCallback(
+    async (input: { body: string; senderName?: string; senderEmail?: string }) => {
+      try {
+        const res = await fetch('/api/support/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+        });
+        const data = await readJsonResponse(res);
+        if (!res.ok) throw new Error(data.error || 'Could not send support message.');
+        if (data.message) {
+          const message = data.message as ChatMessage;
+          setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
+        }
+        if (data.thread) {
+          const thread = data.thread as ChatThread;
+          setThreads((prev) => mergeChatThread(prev, thread));
+        }
+      } catch (err) {
+        console.error('Support chat send error:', err);
+        pushToast(
+          'Message Not Sent',
+          err instanceof Error ? err.message : 'Could not reach support. Please try again.',
+          'error'
+        );
+      }
+    },
+    [pushToast]
+  );
+
   // No-op: typing indicators are not transported over HTTP polling.
   const sendTyping = useCallback(() => {}, []);
 
@@ -1058,6 +1089,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       purchaseFanCard,
       submitReview,
       sendChatMessage,
+      sendSupportMessage,
       sendTyping,
       markThreadRead,
       markNotificationRead,
@@ -1124,6 +1156,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       purchaseFanCard,
       submitReview,
       sendChatMessage,
+      sendSupportMessage,
       sendTyping,
       markThreadRead,
       markNotificationRead,

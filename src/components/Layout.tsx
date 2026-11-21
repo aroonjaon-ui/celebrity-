@@ -3,6 +3,7 @@ import { Bell, Check, CheckCircle2, Globe, LogOut, Menu, Search, ShieldCheck, Us
 import { usePlatform } from '../context/PlatformContext.tsx';
 import { useLanguage, type Language } from '../context/LanguageContext.tsx';
 import { SafeImage } from './SafeImage.tsx';
+import { SupportChat } from './SupportChat.tsx';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const {
@@ -255,7 +256,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               }}
               className="block w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium text-zinc-700 hover:bg-zinc-100"
             >
-              {t('Client Profile')}
+              Client
             </button>
             <button
               type="button"
@@ -437,7 +438,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   }`}
                 >
                   {role === 'admin' && <ShieldCheck className="w-3 h-3" />}
-                  {role === 'client' ? t('Client Profile') : role === 'manager' ? t('Dashboard') : t('Admin')}
+                  {role === 'client' ? 'Client' : role === 'manager' ? t('Dashboard') : t('Admin')}
                 </button>
               )
             )}
@@ -620,15 +621,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <button type="button" onClick={() => navigate('/messages')} className="hover:text-zinc-950 cursor-pointer">
               Messages
             </button>
-            <button type="button" onClick={() => navigate('/client-profile')} className="hover:text-zinc-950 cursor-pointer">
-              Client Profile
-            </button>
             <button type="button" onClick={() => navigate('/manager')} className="hover:text-zinc-950 cursor-pointer">
               Dashboard
             </button>
           </div>
         </div>
       </footer>
+
+      <SupportChat />
     </div>
   );
 };

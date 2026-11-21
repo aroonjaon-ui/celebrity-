@@ -46,6 +46,32 @@ const CATEGORIES: Talent['category'][] = [
   'Athletics & Keynote',
 ];
 
+// The live support thread is shared by all visitors, so it has no roster profile.
+const SUPPORT_TALENT: Talent = {
+  id: 'support',
+  slug: 'support',
+  name: 'Live Support',
+  category: 'Film & Television',
+  location: '—',
+  timezone: 'UTC',
+  dailyRate: 0,
+  currency: 'USD',
+  portraitUrl: '',
+  tagline: 'Platform support',
+  biography: '',
+  yearsActive: 0,
+  experience: [],
+  portfolio: [],
+  socialLinks: {},
+  engagementTypes: [],
+  representationManager: 'Live Support',
+  responseTime: '',
+  verified: true,
+};
+
+const resolveThreadTalent = (talents: Talent[], talentId?: string): Talent | undefined =>
+  talentId === SUPPORT_TALENT.id ? SUPPORT_TALENT : talents.find((t) => t.id === talentId);
+
 const inputClass =
   'w-full px-3 py-2 text-sm bg-white border border-zinc-200 rounded-xl text-zinc-950 placeholder:text-zinc-400 focus:outline-none focus:border-zinc-950 transition-colors';
 const labelClass = 'block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5';
@@ -921,14 +947,16 @@ const AdminMessagesTab: React.FC<{
     () =>
       threads.filter((thread) => {
         if (!query.trim()) return true;
-        const talent = talents.find((t) => t.id === thread.talentId);
-        return `${thread.clientCompany} ${thread.subject} ${talent?.name || ''}`.toLowerCase().includes(query.toLowerCase());
+        const talent = resolveThreadTalent(talents, thread.talentId);
+        return `${thread.clientCompany} ${thread.subject} ${talent?.name || ''}`
+          .toLowerCase()
+          .includes(query.toLowerCase());
       }),
     [threads, talents, query]
   );
 
   const selected = threads.find((thread) => thread.id === selectedId) || filtered[0];
-  const threadTalent = talents.find((t) => t.id === selected?.talentId);
+  const threadTalent = resolveThreadTalent(talents, selected?.talentId);
   const threadMessages = useMemo(
     () => messages.filter((m) => m.threadId === selected?.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     [messages, selected?.id]
@@ -959,7 +987,7 @@ const AdminMessagesTab: React.FC<{
           </div>
           <div className="overflow-y-auto flex-1 divide-y divide-zinc-100">
             {filtered.map((thread) => {
-              const talent = talents.find((t) => t.id === thread.talentId);
+              const talent = resolveThreadTalent(talents, thread.talentId);
               return (
                 <button
                   key={thread.id}
@@ -990,7 +1018,11 @@ const AdminMessagesTab: React.FC<{
               <div className="p-4 border-b border-zinc-100 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold text-zinc-950">{threadTalent?.name || 'Celebrity'}</p>
-                  <p className="text-xs text-zinc-500">{selected.clientCompany} · {selected.subject}</p>
+                  <p className="text-xs text-zinc-500">
+                    {selected.talentId === SUPPORT_TALENT.id
+                      ? 'Client support conversation'
+                      : `${selected.clientCompany} · ${selected.subject}`}
+                  </p>
                 </div>
                 <div className="flex gap-1 p-1 bg-zinc-100 rounded-xl">
                   {(['celebrity', 'manager'] as const).map((mode) => (
