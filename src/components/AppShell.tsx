@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   Bell,
   CalendarDays,
+  CreditCard,
   Check,
   Globe,
   LayoutDashboard,
@@ -126,6 +127,16 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       icon: <ReceiptText className="w-[18px] h-[18px]" />,
       active: route.page === 'bookings' || route.page === 'checkout',
     },
+    ...(isAdmin
+      ? []
+      : [
+          {
+            label: 'Fan Card',
+            path: '/manager?tab=fancards',
+            icon: <CreditCard className="w-[18px] h-[18px]" />,
+            active: route.page === 'manager' && route.tab === 'fancards',
+          },
+        ]),
     isAdmin
       ? {
           label: t('Admin'),

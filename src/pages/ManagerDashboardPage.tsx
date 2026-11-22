@@ -34,7 +34,7 @@ const fanCardStateFor = (fc: FanCard): FanCardState => {
 const hasKycDocumentOnFile = (kyc: UserAccountProfile['kyc'] | undefined): boolean =>
   Boolean(kyc?.documentFileUrl);
 
-export const ManagerDashboardPage: React.FC = () => {
+export const ManagerDashboardPage: React.FC<{ initialTab?: string }> = ({ initialTab }) => {
   const {
     userAccount,
     bookings,
@@ -47,7 +47,11 @@ export const ManagerDashboardPage: React.FC = () => {
     pushToast,
   } = usePlatform();
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    initialTab === 'fancards' || initialTab === 'kyc' || initialTab === 'security' || initialTab === 'preferences'
+      ? initialTab
+      : 'profile'
+  );
   const panelRef = useRef<HTMLElement | null>(null);
 
   // Personal & Signup Details
@@ -89,8 +93,13 @@ export const ManagerDashboardPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
-  const activeFanCards = fanCards.filter((fc) => fanCardStateFor(fc).active);
-  const pendingFanCards = fanCards.filter(
+  const ownerEmail = userAccount?.email?.toLowerCase() || '';
+  const ownedFanCards = fanCards.filter((fc) => {
+    if (!ownerEmail) return false;
+    return (fc.ownerKey || fc.holderEmail || '').toLowerCase() === ownerEmail;
+  });
+  const activeFanCards = ownedFanCards.filter((fc) => fanCardStateFor(fc).active);
+  const pendingFanCards = ownedFanCards.filter(
     (fc) => fc.approvalStatus === 'pending_review' || fc.paymentStatus === 'submitted',
   );
 
@@ -914,7 +923,7 @@ export const ManagerDashboardPage: React.FC = () => {
                 </button>
               </div>
 
-              {fanCards.length === 0 ? (
+              {ownedFanCards.length === 0 ? (
                 <div className="px-6 sm:px-8 py-12 text-center space-y-3">
                   <CreditCard className="w-6 h-6 text-zinc-400 mx-auto" />
                   <p className="text-sm font-semibold text-zinc-950">No Official Fan Cards yet</p>
@@ -933,7 +942,7 @@ export const ManagerDashboardPage: React.FC = () => {
                 </div>
               ) : (
                 <ul className="divide-y divide-zinc-100">
-                  {fanCards.map((fc) => {
+                  {ownedFanCards.map((fc) => {
                     const matchedTalent = talents.find((t) => t.id === fc.talentId);
                     const cardState = fanCardStateFor(fc);
                     return (

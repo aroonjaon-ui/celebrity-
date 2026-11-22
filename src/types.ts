@@ -126,6 +126,7 @@ export interface AdminEscrowAccount extends EscrowAccountSnapshot {
 export interface AdminSettings {
   escrowFeePercent: number;
   fanCardPrices: Record<FanCardTier, number>;
+  fanCardDesigns?: Partial<Record<FanCardTier, string>>;
   escrowAccount: AdminEscrowAccount;
 }
 
@@ -303,6 +304,6 @@ export type AppRoute =
   | { page: 'checkout'; talentId?: string; bookingId?: string }
   | { page: 'bookings' }
   | { page: 'client-profile' }
-  | { page: 'manager' }
+  | { page: 'manager'; tab?: string }
   | { page: 'admin' }
   | { page: 'auth'; mode: 'login' | 'signup' };

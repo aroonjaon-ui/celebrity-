@@ -64,7 +64,7 @@ const RouteView: React.FC = () => {
     case 'client-profile':
       return <ClientProfilePage />;
     case 'manager':
-      return <ManagerDashboardPage />;
+      return <ManagerDashboardPage initialTab={route.tab} />;
     case 'admin':
       return <AdminPage />;
     case 'auth':

@@ -289,6 +289,7 @@ export const AdminPage: React.FC = () => {
           onSaveSettings={updateAdminSettings}
           onLoadAccount={getEscrowAccount}
           onSaveAccount={updateEscrowAccount}
+          uploadMediaFile={uploadMediaFile}
         />
       )}
 
@@ -608,9 +609,11 @@ const EscrowTab: React.FC<{
   onSaveSettings: (patch: Partial<AdminSettings>) => Promise<void>;
   onLoadAccount: () => Promise<AdminEscrowAccount>;
   onSaveAccount: (patch: Record<string, unknown>) => Promise<void>;
-}> = ({ settings, escrowDepositInfo, onSaveSettings, onLoadAccount, onSaveAccount }) => {
+  uploadMediaFile: ReturnType<typeof usePlatform>['uploadMediaFile'];
+}> = ({ settings, escrowDepositInfo, onSaveSettings, onLoadAccount, onSaveAccount, uploadMediaFile }) => {
   const [escrowPercent, setEscrowPercent] = useState('6');
   const [prices, setPrices] = useState({ silver: '49', gold: '149', platinum: '399' });
+  const [designs, setDesigns] = useState<Partial<Record<FanCardTier, string>>>({});
   const [account, setAccount] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -623,6 +626,7 @@ const EscrowTab: React.FC<{
         gold: String(settings.fanCardPrices.gold),
         platinum: String(settings.fanCardPrices.platinum),
       });
+      setDesigns(settings.fanCardDesigns || {});
     }
   }, [settings]);
 
@@ -648,6 +652,16 @@ const EscrowTab: React.FC<{
     loadAccount();
   }, [loadAccount]);
 
+  const uploadDesign = async (tier: FanCardTier, file: File | undefined) => {
+    if (!file) return;
+    try {
+      const result = await uploadMediaFile(file);
+      setDesigns((prev) => ({ ...prev, [tier]: result.url }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not upload Fan Card design.');
+    }
+  };
+
   const saveAll = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -660,6 +674,7 @@ const EscrowTab: React.FC<{
           gold: Number(prices.gold),
           platinum: Number(prices.platinum),
         },
+        fanCardDesigns: designs,
       });
       await onSaveAccount({
         ...account,
@@ -692,6 +707,24 @@ const EscrowTab: React.FC<{
                   value={prices[tier]}
                   onChange={(e) => setPrices((prev) => ({ ...prev, [tier]: e.target.value }))}
                 />
+              </div>
+              <div className="mt-2">
+                <label className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 cursor-pointer">
+                  <Upload className="w-3.5 h-3.5" /> Upload design
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => void uploadDesign(tier, e.target.files?.[0])}
+                  />
+                </label>
+                {designs[tier] && (
+                  <SafeImage
+                    src={designs[tier]!}
+                    alt={`${tier} Fan Card design`}
+                    className="mt-2 h-14 w-full rounded-lg border border-zinc-200 object-cover"
+                  />
+                )}
               </div>
             </Field>
           ))}
@@ -980,6 +1013,7 @@ const UsersTab: React.FC<{ pushToast: ReturnType<typeof usePlatform>['pushToast'
   const [users, setUsers] = useState<AdminUserView[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyEmail, setBusyEmail] = useState('');
+  const [assignTier, setAssignTier] = useState<FanCardTier>('gold');
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -1021,6 +1055,24 @@ const UsersTab: React.FC<{ pushToast: ReturnType<typeof usePlatform>['pushToast'
       );
     } catch (err) {
       pushToast('KYC Update Failed', err instanceof Error ? err.message : 'Please try again.', 'error');
+    } finally {
+      setBusyEmail('');
+    }
+  };
+
+  const assignFanCard = async (user: AdminUserView) => {
+    setBusyEmail(user.email);
+    try {
+      const res = await fetch('/api/admin/users/fancard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, tier: assignTier }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error || 'Could not assign Fan Card.');
+      pushToast('Fan Card Assigned', `${user.fullName || user.email} now has a ${assignTier.toUpperCase()} Fan Card.`, 'success');
+    } catch (err) {
+      pushToast('Assignment Failed', err instanceof Error ? err.message : 'Please try again.', 'error');
     } finally {
       setBusyEmail('');
     }
@@ -1152,6 +1204,25 @@ const UsersTab: React.FC<{ pushToast: ReturnType<typeof usePlatform>['pushToast'
               >
                 <X className="w-3.5 h-3.5" /> Reject / Reset
               </button>
+              <div className="ml-auto flex items-center gap-2">
+                <select
+                  value={assignTier}
+                  onChange={(e) => setAssignTier(e.target.value as FanCardTier)}
+                  className="px-2.5 py-2 text-xs border border-zinc-200 rounded-xl bg-white cursor-pointer"
+                >
+                  <option value="silver">Silver</option>
+                  <option value="gold">Gold</option>
+                  <option value="platinum">Platinum</option>
+                </select>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void assignFanCard(user)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <CreditCard className="w-3.5 h-3.5" /> Assign Fan Card
+                </button>
+              </div>
             </div>
           </div>
         );

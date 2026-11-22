@@ -219,7 +219,10 @@ function parsePathToRoute(fullPath: string): AppRoute {
   if (clean === '/checkout') return { page: 'checkout' };
   if (clean === '/bookings') return { page: 'bookings' };
   if (clean === '/client-profile') return { page: 'client-profile' };
-  if (clean === '/manager' || clean === '/dashboard') return { page: 'manager' };
+  if (clean === '/manager' || clean === '/dashboard') {
+    const tab = new URLSearchParams(rawSearch).get('tab') || undefined;
+    return { page: 'manager', tab };
+  }
   if (clean === '/admin') return { page: 'admin' };
   if (clean === '/auth' || clean === '/login') return { page: 'auth', mode: 'login' };
   if (clean === '/signup' || clean === '/register') return { page: 'auth', mode: 'signup' };
