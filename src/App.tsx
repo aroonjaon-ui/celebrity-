@@ -20,11 +20,11 @@ import { RosterPage } from './pages/RosterPage.tsx';
 
 const RouteView: React.FC = () => {
   const { route, loading, isAuthenticated, isAdmin, navigate } = usePlatform();
-  const isLoginRoute = route.page === 'auth' || route.page === 'admin';
-  const isBlocked = !loading && !isLoginRoute && !isAuthenticated && !isAdmin;
+  const isPublicRoute = route.page === 'home' || route.page === 'auth' || route.page === 'admin';
+  const isBlocked = !loading && !isPublicRoute && !isAuthenticated && !isAdmin;
 
   useEffect(() => {
-    if (isBlocked) navigate('/auth');
+    if (isBlocked) navigate('/');
   }, [isBlocked, navigate]);
 
   if (loading || isBlocked) {

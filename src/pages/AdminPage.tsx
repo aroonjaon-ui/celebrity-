@@ -975,7 +975,7 @@ const AdminMessagesTab: React.FC<{
 
   return (
     <section className="bg-white border border-zinc-200 rounded-3xl overflow-hidden">
-      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] min-h-[560px]">
+      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] h-[calc(100vh-220px)] min-h-[640px]">
         <div className="border-r border-zinc-100 flex flex-col">
           <div className="p-4 border-b border-zinc-100">
             <input
@@ -1040,7 +1040,7 @@ const AdminMessagesTab: React.FC<{
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-zinc-50/50">
+              <div className="flex-1 overflow-y-auto p-5 pb-24 space-y-3 bg-zinc-50/50">
                 {threadMessages.map((message) => (
                   <div key={message.id} className={`flex ${message.senderRole === 'client' ? 'justify-start' : 'justify-end'}`}>
                     <div
@@ -1057,11 +1057,18 @@ const AdminMessagesTab: React.FC<{
                 ))}
               </div>
 
-              <form onSubmit={send} className="p-4 border-t border-zinc-100 flex gap-2">
-                <input
-                  className={inputClass}
+              <form onSubmit={send} className="p-4 border-t border-zinc-100 flex items-end gap-2">
+                <textarea
+                  rows={2}
+                  className={`${inputClass} resize-none max-h-32`}
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      e.currentTarget.form?.requestSubmit();
+                    }
+                  }}
                   placeholder={`Reply as ${senderMode === 'celebrity' ? threadTalent?.name || 'celebrity' : 'management'}…`}
                 />
                 <button
