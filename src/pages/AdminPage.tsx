@@ -682,14 +682,17 @@ const EscrowTab: React.FC<{
             <input type="number" min={0} max={50} step="0.5" className={inputClass} value={escrowPercent} onChange={(e) => setEscrowPercent(e.target.value)} />
           </Field>
           {(['silver', 'gold', 'platinum'] as FanCardTier[]).map((tier) => (
-            <Field key={tier} label={`${tier.toUpperCase()} Fan Card`}>
-              <input
-                type="number"
-                min={1}
-                className={inputClass}
-                value={prices[tier]}
-                onChange={(e) => setPrices((prev) => ({ ...prev, [tier]: e.target.value }))}
-              />
+            <Field key={tier} label={`${tier.toUpperCase()} Fan Card ($)`}>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-zinc-500">$</span>
+                <input
+                  type="number"
+                  min={1}
+                  className={`${inputClass} pl-7`}
+                  value={prices[tier]}
+                  onChange={(e) => setPrices((prev) => ({ ...prev, [tier]: e.target.value }))}
+                />
+              </div>
             </Field>
           ))}
         </div>
