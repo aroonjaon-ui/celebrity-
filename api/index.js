@@ -1563,6 +1563,70 @@ async function createApiApp() {
       user: record.userAccount
     });
   });
+  app.post("/api/admin/fancards/assign", requireAdmin, (req, res) => {
+    const { email, tier, depositReference, cardImageUrl } = req.body;
+    const cleanEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+    const record = store.userAccounts?.find((account) => account.email === cleanEmail);
+    if (!record) {
+      res.status(404).json({ error: "Registered user not found." });
+      return;
+    }
+    if (tier !== "silver" && tier !== "gold" && tier !== "platinum") {
+      res.status(400).json({ error: "Please select a valid Fan Card tier." });
+      return;
+    }
+    const cleanRef = typeof depositReference === "string" ? depositReference.trim().slice(0, 120) : "";
+    if (cleanRef.length < 3) {
+      res.status(400).json({ error: "Enter the confirmed deposit reference before assigning a card." });
+      return;
+    }
+    if (store.fanCards.some(
+      (fc) => fc.holderEmail === cleanEmail && fc.paymentMethodSummary?.includes(cleanRef)
+    )) {
+      res.status(409).json({ error: "A card has already been assigned for this deposit reference." });
+      return;
+    }
+    const safeImage = sanitizeSafeUrl(cardImageUrl, true) || sanitizeSafeUrl(store.adminSettings.fanCardDesigns?.[tier], true);
+    if (!safeImage) {
+      res.status(400).json({ error: "Save a Fan Card design for this tier first, or upload an image." });
+      return;
+    }
+    const talent = store.talents[0];
+    if (!talent) {
+      res.status(400).json({ error: "No roster talent is available for card assignment." });
+      return;
+    }
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    const validUntil = new Date(nowIso);
+    validUntil.setUTCFullYear(validUntil.getUTCFullYear() + 1);
+    const prefix = talent.name.split(" ").map((part) => part[0] || "").join("").toUpperCase().slice(0, 3);
+    const serial = `FC-${prefix}-${Math.floor(1e5 + Math.random() * 9e5)}`;
+    const fanCard = {
+      id: `fc-${crypto.randomUUID().slice(0, 8)}`,
+      cardNumber: serial,
+      talentId: talent.id,
+      talentName: talent.name,
+      tier,
+      holderName: record.userAccount.fullName || cleanEmail,
+      holderEmail: cleanEmail,
+      ownerKey: cleanEmail,
+      annualFee: store.adminSettings.fanCardPrices[tier],
+      currency: "USD",
+      active: true,
+      paymentStatus: "paid",
+      approvalStatus: "approved",
+      paymentMethodSummary: `Bank Deposit - ${cleanRef}`,
+      receiptSignature: crypto.createHmac("sha256", RECEIPT_SECRET).update(`${serial}:${cleanRef}`).digest("hex").slice(0, 20),
+      cardImageUrl: safeImage,
+      approvedAt: nowIso,
+      approvedBy: clientEmailForRequest(req) || "admin@mercersterling.com",
+      validUntil: validUntil.toISOString().slice(0, 10),
+      createdAt: nowIso
+    };
+    store.fanCards.unshift(fanCard);
+    saveStore(store);
+    res.status(201).json({ fanCard });
+  });
   app.put("/api/admin/settings", requireAdmin, (req, res) => {
     const body = req.body;
     if (typeof body.escrowFeePercent === "number" && Number.isFinite(body.escrowFeePercent) && body.escrowFeePercent >= 0 && body.escrowFeePercent <= 50) {

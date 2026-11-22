@@ -617,6 +617,24 @@ const EscrowTab: React.FC<{
   const [account, setAccount] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [assignUsers, setAssignUsers] = useState<AdminUserView[]>([]);
+  const [assignEmail, setAssignEmail] = useState('');
+  const [assignTier, setAssignTier] = useState<FanCardTier>('gold');
+  const [depositRef, setDepositRef] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [assignMessage, setAssignMessage] = useState('');
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/admin/users');
+        const data = (await res.json().catch(() => ({}))) as { users?: AdminUserView[] };
+        if (res.ok && data.users) setAssignUsers(data.users);
+      } catch {
+        // The assign list is optional; the deposit approval flow still works.
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (settings) {
@@ -659,6 +677,27 @@ const EscrowTab: React.FC<{
       setDesigns((prev) => ({ ...prev, [tier]: result.url }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not upload Fan Card design.');
+    }
+  };
+
+  const assignAfterDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAssigning(true);
+    setAssignMessage('');
+    try {
+      const res = await fetch('/api/admin/fancards/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: assignEmail, tier: assignTier, depositReference: depositRef }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error || 'Could not assign Fan Card.');
+      setAssignMessage(`${assignTier.toUpperCase()} Fan Card assigned. The user can now see it under Fan Card.`);
+      setDepositRef('');
+    } catch (err) {
+      setAssignMessage(err instanceof Error ? err.message : 'Could not assign Fan Card.');
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -729,6 +768,66 @@ const EscrowTab: React.FC<{
             </Field>
           ))}
         </div>
+      </section>
+
+      <section className="bg-white border border-zinc-200 rounded-3xl p-6 sm:p-8">
+        <div className="flex items-center gap-3 mb-2">
+          <CreditCard className="w-5 h-5 text-zinc-500" />
+          <div>
+            <h2 className="font-display text-xl font-bold text-zinc-950">Assign Fan Card After Deposit</h2>
+            <p className="text-xs text-zinc-500">
+              Only after the bank deposit is confirmed. KYC verification alone never issues a card.
+            </p>
+          </div>
+        </div>
+        <form onSubmit={assignAfterDeposit} className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-5 items-end">
+          <Field label="Registered user">
+            <select
+              required
+              value={assignEmail}
+              onChange={(e) => setAssignEmail(e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Select user…</option>
+              {assignUsers.map((user) => (
+                <option key={user.email} value={user.email}>
+                  {user.fullName || user.email} ({user.email})
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Tier">
+            <select
+              value={assignTier}
+              onChange={(e) => setAssignTier(e.target.value as FanCardTier)}
+              className={inputClass}
+            >
+              <option value="silver">Silver</option>
+              <option value="gold">Gold</option>
+              <option value="platinum">Platinum</option>
+            </select>
+          </Field>
+          <Field label="Confirmed deposit reference">
+            <input
+              required
+              value={depositRef}
+              onChange={(e) => setDepositRef(e.target.value)}
+              placeholder="e.g. DEP-10482"
+              className={inputClass}
+            />
+          </Field>
+          <button
+            type="submit"
+            disabled={assigning || !designs[assignTier]}
+            className="h-[42px] px-5 text-sm font-semibold text-white bg-zinc-950 rounded-xl hover:bg-zinc-800 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {assigning ? 'Assigning…' : 'Confirm & Assign Card'}
+          </button>
+        </form>
+        {!designs[assignTier] && (
+          <p className="mt-3 text-[11px] text-amber-700">Save a {assignTier} design above before assigning.</p>
+        )}
+        {assignMessage && <p className="mt-3 text-xs text-zinc-600">{assignMessage}</p>}
       </section>
 
       <section className="bg-white border border-zinc-200 rounded-3xl p-6 sm:p-8">
@@ -832,9 +931,6 @@ const ApprovalsTab: React.FC<{
     setBusyId(item.id);
     setError('');
     try {
-      if (item.type === 'fancard' && !cardImages[item.id]) {
-        throw new Error('Upload the official Fan Card image first.');
-      }
       await approveDeposit(item.type, item.id, cardImages[item.id]);
       await load();
     } catch (err) {
@@ -986,7 +1082,8 @@ const ApprovalsTab: React.FC<{
                         disabled={busyId === item.id}
                         className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
                       >
-                        <CheckCircle2 className="w-4 h-4" /> Approve
+                        <CheckCircle2 className="w-4 h-4" />
+                        {item.type === 'fancard' ? 'Confirm & Assign Card' : 'Approve'}
                       </button>
                       <button
                         type="button"
