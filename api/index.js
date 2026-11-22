@@ -1320,7 +1320,7 @@ async function createApiApp() {
   app.get("/api/admin/session", (req, res) => {
     res.json({ isAdmin: isAdminRequest(req) });
   });
-  app.post("/api/auth/signup", (req, res) => {
+  app.post("/api/auth/signup", async (req, res) => {
     const { fullName, email, password, companyName } = req.body;
     const cleanName = typeof fullName === "string" ? fullName.trim().slice(0, 80) : "";
     const cleanEmail = typeof email === "string" ? email.trim().toLowerCase().slice(0, 120) : "";
@@ -1330,6 +1330,11 @@ async function createApiApp() {
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       res.status(400).json({ error: "Please enter a valid email address." });
+      return;
+    }
+    const adminCredential = await readAdminCredential(cleanEmail);
+    if (adminCredential && adminCredential.email === cleanEmail) {
+      res.status(409).json({ error: "This email is reserved for administration." });
       return;
     }
     if (typeof password !== "string" || password.length < 8) {
@@ -1441,6 +1446,52 @@ async function createApiApp() {
     }
     next();
   }
+  app.get("/api/admin/users", requireAdmin, (_req, res) => {
+    const users = (store.userAccounts || []).map((record) => ({
+      id: record.userAccount.id,
+      email: record.userAccount.email || record.email,
+      fullName: record.userAccount.fullName,
+      companyName: record.clientProfile.companyName || "",
+      signupDate: record.userAccount.signupDate,
+      lastLoginAt: record.userAccount.lastLoginAt,
+      kyc: record.userAccount.kyc
+    })).sort((a, b) => (b.signupDate || "").localeCompare(a.signupDate || ""));
+    res.json({ users });
+  });
+  app.post("/api/admin/users/kyc", requireAdmin, (req, res) => {
+    const { email, decision } = req.body;
+    const cleanEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+    const record = store.userAccounts?.find((account) => account.email === cleanEmail);
+    if (!record) {
+      res.status(404).json({ error: "Registered user not found." });
+      return;
+    }
+    if (decision !== "approve" && decision !== "reject") {
+      res.status(400).json({ error: "Invalid KYC decision." });
+      return;
+    }
+    if (decision === "approve" && !record.userAccount.kyc?.documentFileUrl) {
+      res.status(400).json({ error: "A KYC document must be submitted before approval." });
+      return;
+    }
+    const nextKyc = {
+      ...record.userAccount.kyc,
+      status: decision === "approve" ? "verified" : "unverified"
+    };
+    record.userAccount = {
+      ...record.userAccount,
+      kyc: nextKyc,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (store.userAccount?.email === cleanEmail) store.userAccount = record.userAccount;
+    saveStore(store);
+    broadcast("user:updated", record.userAccount);
+    res.json({
+      email: cleanEmail,
+      kyc: nextKyc,
+      user: record.userAccount
+    });
+  });
   app.put("/api/admin/settings", requireAdmin, (req, res) => {
     const body = req.body;
     if (typeof body.escrowFeePercent === "number" && Number.isFinite(body.escrowFeePercent) && body.escrowFeePercent >= 0 && body.escrowFeePercent <= 50) {

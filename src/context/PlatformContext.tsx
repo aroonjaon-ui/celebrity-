@@ -507,6 +507,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!res.ok) throw new Error(data.error || 'Could not create account.');
       setIsAuthenticated(true);
       setHasClientAccount(true);
+      setIsAdmin(false);
       setUserAccount(data.userAccount || null);
       if (data.clientProfile) setClientProfile(data.clientProfile);
       setWorkspace({ role: 'client', displayName: data.userAccount?.fullName || input.fullName });
@@ -527,6 +528,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (!res.ok) throw new Error(data.error || 'Could not log in.');
       setIsAuthenticated(true);
       setHasClientAccount(true);
+      setIsAdmin(false);
       setUserAccount(data.userAccount || null);
       setWorkspace({ role: 'client', displayName: data.userAccount?.fullName || email });
       navigate('/');
@@ -540,6 +542,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const data = await readJsonResponse(res);
     if (!res.ok) throw new Error(data.error || 'Could not log out.');
     setIsAuthenticated(false);
+    setIsAdmin(false);
     setWorkspace({ role: 'client', displayName: 'Jordan Reyes' });
     navigate('/auth');
     pushToast('Signed Out', 'You have been logged out.', 'info');

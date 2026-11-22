@@ -12,15 +12,33 @@ import {
   ShieldCheck,
   Upload,
   UserPlus,
+  Users,
   X,
   XCircle,
 } from 'lucide-react';
 import { usePlatform } from '../context/PlatformContext.tsx';
 import { useLanguage } from '../context/LanguageContext.tsx';
 import { SafeImage } from '../components/SafeImage.tsx';
-import type { AdminEscrowAccount, AdminSettings, EscrowAccountSnapshot, FanCardTier, Talent } from '../types.ts';
+import type {
+  AdminEscrowAccount,
+  AdminSettings,
+  EscrowAccountSnapshot,
+  FanCardTier,
+  Talent,
+  UserAccountProfile,
+} from '../types.ts';
 
-type AdminTab = 'roster' | 'editor' | 'escrow' | 'approvals' | 'messages';
+type AdminTab = 'roster' | 'editor' | 'escrow' | 'approvals' | 'users' | 'messages';
+
+interface AdminUserView {
+  id: string;
+  email: string;
+  fullName: string;
+  companyName: string;
+  signupDate: string;
+  lastLoginAt: string;
+  kyc: UserAccountProfile['kyc'];
+}
 
 interface AdminDepositItem {
   type: 'booking' | 'fancard';
@@ -200,6 +218,7 @@ export const AdminPage: React.FC = () => {
     { id: 'editor', label: 'Celebrity Editor', icon: <Save className="w-4 h-4" /> },
     { id: 'escrow', label: t('Escrow & Deposits'), icon: <ShieldCheck className="w-4 h-4" /> },
     { id: 'approvals', label: t('Approvals'), icon: <CheckCircle2 className="w-4 h-4" /> },
+    { id: 'users', label: 'Users & KYC', icon: <Users className="w-4 h-4" /> },
     { id: 'messages', label: t('All Messages'), icon: <MessageSquare className="w-4 h-4" /> },
   ];
 
@@ -281,6 +300,8 @@ export const AdminPage: React.FC = () => {
           uploadMediaFile={uploadMediaFile}
         />
       )}
+
+      {tab === 'users' && <UsersTab pushToast={pushToast} />}
 
       {tab === 'messages' && (
         <AdminMessagesTab
@@ -947,6 +968,192 @@ const ApprovalsTab: React.FC<{
         </div>
       )}
     </section>
+  );
+};
+
+/* ---------------- Users & KYC ---------------- */
+
+const UsersTab: React.FC<{ pushToast: ReturnType<typeof usePlatform>['pushToast'] }> = ({ pushToast }) => {
+  const [users, setUsers] = useState<AdminUserView[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyEmail, setBusyEmail] = useState('');
+
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/users');
+      const data = (await res.json().catch(() => ({}))) as { users?: AdminUserView[]; error?: string };
+      if (!res.ok) throw new Error(data.error || 'Could not load registered users.');
+      setUsers(data.users || []);
+    } catch (err) {
+      pushToast('Unable to Load Users', err instanceof Error ? err.message : 'Please try again.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [pushToast]);
+
+  useEffect(() => {
+    void loadUsers();
+  }, [loadUsers]);
+
+  const decideKyc = async (user: AdminUserView, decision: 'approve' | 'reject') => {
+    setBusyEmail(user.email);
+    try {
+      const res = await fetch('/api/admin/users/kyc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, decision }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { kyc?: AdminUserView['kyc']; error?: string };
+      if (!res.ok) throw new Error(data.error || 'Could not update KYC.');
+      if (data.kyc) {
+        setUsers((current) =>
+          current.map((item) => (item.email === user.email ? { ...item, kyc: data.kyc! } : item))
+        );
+      }
+      pushToast(
+        decision === 'approve' ? 'KYC Approved' : 'KYC Rejected',
+        `${user.fullName || user.email} has been updated.`,
+        'success'
+      );
+    } catch (err) {
+      pushToast('KYC Update Failed', err instanceof Error ? err.message : 'Please try again.', 'error');
+    } finally {
+      setBusyEmail('');
+    }
+  };
+
+  const statusLabel = (status: AdminUserView['kyc']['status']) =>
+    status === 'verified' ? 'Verified' : status === 'pending_review' ? 'Pending review' : 'Unverified';
+  const statusClass = (status: AdminUserView['kyc']['status']) =>
+    status === 'verified'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      : status === 'pending_review'
+        ? 'bg-amber-50 text-amber-700 border-amber-200'
+        : 'bg-zinc-100 text-zinc-600 border-zinc-200';
+  const formatDate = (value?: string) => (value ? new Date(value).toLocaleDateString() : '—');
+
+  if (loading) {
+    return <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-sm text-zinc-500">Loading registered users…</div>;
+  }
+
+  if (users.length === 0) {
+    return (
+      <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-sm text-zinc-500">
+        No registered users yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-xl font-bold text-zinc-950">Registered Users</h2>
+          <p className="mt-1 text-xs text-zinc-500">Review KYC submissions and approve verified accounts.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void loadUsers()}
+          className="px-3 py-2 text-xs font-semibold text-zinc-700 bg-white border border-zinc-200 rounded-xl hover:border-zinc-950 cursor-pointer"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {users.map((user) => {
+        const documentUrl = user.kyc.documentFileUrl || '';
+        const isImage = /\.(png|jpe?g|webp)$/i.test(documentUrl);
+        const busy = busyEmail === user.email;
+        return (
+          <div key={user.email} className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-semibold text-zinc-950 truncate">{user.fullName || user.email}</p>
+                <p className="text-xs text-zinc-500 truncate">{user.email}</p>
+                <p className="mt-1 text-[11px] text-zinc-400">
+                  {user.companyName ? `${user.companyName} · ` : ''}
+                  Joined {formatDate(user.signupDate)} · Last login {formatDate(user.lastLoginAt)}
+                </p>
+              </div>
+              <span
+                className={`inline-flex px-2.5 py-1 rounded-full border text-[11px] font-semibold ${statusClass(user.kyc.status)}`}
+              >
+                {statusLabel(user.kyc.status)}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div>
+                <p className={labelClass}>Legal name</p>
+                <p className="font-medium text-zinc-800 truncate">{user.kyc.legalName || '—'}</p>
+              </div>
+              <div>
+                <p className={labelClass}>Document</p>
+                <p className="font-medium text-zinc-800 truncate">{user.kyc.documentType || '—'}</p>
+              </div>
+              <div>
+                <p className={labelClass}>Number</p>
+                <p className="font-medium text-zinc-800 truncate">{user.kyc.documentNumberMasked || '—'}</p>
+              </div>
+              <div>
+                <p className={labelClass}>Expiry</p>
+                <p className="font-medium text-zinc-800">{user.kyc.documentExpiry || '—'}</p>
+              </div>
+              <div className="col-span-2 sm:col-span-4">
+                <p className={labelClass}>Issuing country</p>
+                <p className="font-medium text-zinc-800">{user.kyc.issuingCountry || '—'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className={labelClass}>KYC document</p>
+              {documentUrl ? (
+                <>
+                  {isImage && (
+                    <SafeImage
+                      src={documentUrl}
+                      alt={`KYC document for ${user.fullName || user.email}`}
+                      fallbackText="KYC"
+                      className="h-32 w-full object-cover rounded-xl border border-zinc-200"
+                    />
+                  )}
+                  <a
+                    href={documentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex text-xs font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    Open document ↗
+                  </a>
+                </>
+              ) : (
+                <p className="text-xs text-amber-700">No document uploaded — approval is blocked.</p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                disabled={busy || !documentUrl || user.kyc.status === 'verified'}
+                onClick={() => void decideKyc(user, 'approve')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-zinc-950 rounded-xl hover:bg-blue-600 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Check className="w-3.5 h-3.5" /> Approve KYC
+              </button>
+              <button
+                type="button"
+                disabled={busy || user.kyc.status === 'unverified'}
+                onClick={() => void decideKyc(user, 'reject')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-zinc-700 bg-white border border-zinc-200 rounded-xl hover:border-zinc-950 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <X className="w-3.5 h-3.5" /> Reject / Reset
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 };
 

@@ -1495,7 +1495,7 @@ export async function createApiApp(): Promise<express.Express> {
 
   // Client account signup / login / logout. Multiple accounts are supported;
   // each session points at its own stored account snapshot.
-  app.post('/api/auth/signup', (req, res) => {
+  app.post('/api/auth/signup', async (req, res) => {
     const { fullName, email, password, companyName } = req.body as {
       fullName?: string;
       email?: string;
@@ -1510,6 +1510,11 @@ export async function createApiApp(): Promise<express.Express> {
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       res.status(400).json({ error: 'Please enter a valid email address.' });
+      return;
+    }
+    const adminCredential = await readAdminCredential(cleanEmail);
+    if (adminCredential && adminCredential.email === cleanEmail) {
+      res.status(409).json({ error: 'This email is reserved for administration.' });
       return;
     }
     if (typeof password !== 'string' || password.length < 8) {
@@ -1630,6 +1635,58 @@ export async function createApiApp(): Promise<express.Express> {
     }
     next();
   }
+
+  // Admin-only registered user / KYC views. Password hashes are never returned.
+  app.get('/api/admin/users', requireAdmin, (_req, res) => {
+    const users = (store.userAccounts || [])
+      .map((record) => ({
+        id: record.userAccount.id,
+        email: record.userAccount.email || record.email,
+        fullName: record.userAccount.fullName,
+        companyName: record.clientProfile.companyName || '',
+        signupDate: record.userAccount.signupDate,
+        lastLoginAt: record.userAccount.lastLoginAt,
+        kyc: record.userAccount.kyc,
+      }))
+      .sort((a, b) => (b.signupDate || '').localeCompare(a.signupDate || ''));
+    res.json({ users });
+  });
+
+  app.post('/api/admin/users/kyc', requireAdmin, (req, res) => {
+    const { email, decision } = req.body as { email?: string; decision?: string };
+    const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const record = store.userAccounts?.find((account) => account.email === cleanEmail);
+    if (!record) {
+      res.status(404).json({ error: 'Registered user not found.' });
+      return;
+    }
+    if (decision !== 'approve' && decision !== 'reject') {
+      res.status(400).json({ error: 'Invalid KYC decision.' });
+      return;
+    }
+    if (decision === 'approve' && !record.userAccount.kyc?.documentFileUrl) {
+      res.status(400).json({ error: 'A KYC document must be submitted before approval.' });
+      return;
+    }
+
+    const nextKyc = {
+      ...record.userAccount.kyc,
+      status: decision === 'approve' ? ('verified' as const) : ('unverified' as const),
+    };
+    record.userAccount = {
+      ...record.userAccount,
+      kyc: nextKyc,
+      updatedAt: new Date().toISOString(),
+    };
+    if (store.userAccount?.email === cleanEmail) store.userAccount = record.userAccount;
+    saveStore(store);
+    broadcast('user:updated', record.userAccount);
+    res.json({
+      email: cleanEmail,
+      kyc: nextKyc,
+      user: record.userAccount,
+    });
+  });
 
   // Admin settings
   app.put('/api/admin/settings', requireAdmin, (req, res) => {
