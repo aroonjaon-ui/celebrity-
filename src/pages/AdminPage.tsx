@@ -1013,7 +1013,6 @@ const UsersTab: React.FC<{ pushToast: ReturnType<typeof usePlatform>['pushToast'
   const [users, setUsers] = useState<AdminUserView[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyEmail, setBusyEmail] = useState('');
-  const [assignTier, setAssignTier] = useState<FanCardTier>('gold');
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -1060,24 +1059,6 @@ const UsersTab: React.FC<{ pushToast: ReturnType<typeof usePlatform>['pushToast'
     }
   };
 
-  const assignFanCard = async (user: AdminUserView) => {
-    setBusyEmail(user.email);
-    try {
-      const res = await fetch('/api/admin/users/fancard', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email, tier: assignTier }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(data.error || 'Could not assign Fan Card.');
-      pushToast('Fan Card Assigned', `${user.fullName || user.email} now has a ${assignTier.toUpperCase()} Fan Card.`, 'success');
-    } catch (err) {
-      pushToast('Assignment Failed', err instanceof Error ? err.message : 'Please try again.', 'error');
-    } finally {
-      setBusyEmail('');
-    }
-  };
-
   const statusLabel = (status: AdminUserView['kyc']['status']) =>
     status === 'verified' ? 'Verified' : status === 'pending_review' ? 'Pending review' : 'Unverified';
   const statusClass = (status: AdminUserView['kyc']['status']) =>
@@ -1105,7 +1086,7 @@ const UsersTab: React.FC<{ pushToast: ReturnType<typeof usePlatform>['pushToast'
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-xl font-bold text-zinc-950">Registered Users</h2>
-          <p className="mt-1 text-xs text-zinc-500">Review KYC submissions and approve verified accounts.</p>
+          <p className="mt-1 text-xs text-zinc-500">KYC only marks a user as verified on the app. Fan Cards are issued only after an approved purchase.</p>
         </div>
         <button
           type="button"
@@ -1204,25 +1185,6 @@ const UsersTab: React.FC<{ pushToast: ReturnType<typeof usePlatform>['pushToast'
               >
                 <X className="w-3.5 h-3.5" /> Reject / Reset
               </button>
-              <div className="ml-auto flex items-center gap-2">
-                <select
-                  value={assignTier}
-                  onChange={(e) => setAssignTier(e.target.value as FanCardTier)}
-                  className="px-2.5 py-2 text-xs border border-zinc-200 rounded-xl bg-white cursor-pointer"
-                >
-                  <option value="silver">Silver</option>
-                  <option value="gold">Gold</option>
-                  <option value="platinum">Platinum</option>
-                </select>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void assignFanCard(user)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <CreditCard className="w-3.5 h-3.5" /> Assign Fan Card
-                </button>
-              </div>
             </div>
           </div>
         );

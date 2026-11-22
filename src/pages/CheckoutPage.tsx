@@ -10,6 +10,30 @@ const FAN_CARD_TIERS: Array<{ id: FanCardTier; label: string; summary: string }>
   { id: 'platinum', label: 'Platinum Pass', summary: 'VIP lounge invitations & concierge priority' },
 ];
 
+const TIER_STYLES: Record<FanCardTier, { card: string; selected: string; swatch: string; text: string; sub: string }> = {
+  silver: {
+    card: 'bg-gradient-to-br from-zinc-100 via-zinc-300 to-zinc-200 border-zinc-300',
+    selected: 'ring-2 ring-zinc-950 border-zinc-950',
+    swatch: 'bg-zinc-400',
+    text: 'text-zinc-900',
+    sub: 'text-zinc-600',
+  },
+  gold: {
+    card: 'bg-gradient-to-br from-amber-200 via-yellow-400 to-amber-500 border-amber-400',
+    selected: 'ring-2 ring-amber-700 border-amber-700',
+    swatch: 'bg-amber-500',
+    text: 'text-amber-950',
+    sub: 'text-amber-900',
+  },
+  platinum: {
+    card: 'bg-gradient-to-br from-slate-700 via-slate-500 to-slate-300 border-slate-500',
+    selected: 'ring-2 ring-slate-900 border-slate-900',
+    swatch: 'bg-slate-200',
+    text: 'text-white',
+    sub: 'text-slate-100',
+  },
+};
+
 export const CheckoutPage: React.FC = () => {
   const {
     talents,
@@ -395,15 +419,16 @@ export const CheckoutPage: React.FC = () => {
                       setSelectedFanCardTier(tier.id);
                       setSubmittedAmount(String(fanCardPrices[tier.id]));
                     }}
-                    className={`text-left p-4 rounded-xl border cursor-pointer ${
-                      selectedFanCardTier === tier.id
-                        ? 'border-zinc-950 bg-zinc-950 text-white'
-                        : 'border-zinc-200 text-zinc-950 hover:border-zinc-400'
+                    className={`relative text-left p-4 rounded-xl border cursor-pointer transition-shadow ${TIER_STYLES[tier.id].card} ${TIER_STYLES[tier.id].text} ${
+                      selectedFanCardTier === tier.id ? `${TIER_STYLES[tier.id].selected} shadow-lg` : 'hover:shadow-md'
                     }`}
                   >
-                    <p className="font-display text-sm font-bold">{tier.label}</p>
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${TIER_STYLES[tier.id].swatch} ${tier.id === 'silver' ? 'text-zinc-900' : 'text-white'}`}>
+                      {tier.id}
+                    </span>
+                    <p className="font-display text-sm font-bold mt-2">{tier.label}</p>
                     <p className="mt-1 font-mono text-base font-bold">${fanCardPrices[tier.id]}/yr</p>
-                    <p className={`mt-1.5 text-[11px] ${selectedFanCardTier === tier.id ? 'text-zinc-300' : 'text-zinc-500'}`}>
+                    <p className={`mt-1.5 text-[11px] ${TIER_STYLES[tier.id].sub}`}>
                       {tier.summary}
                     </p>
                   </button>

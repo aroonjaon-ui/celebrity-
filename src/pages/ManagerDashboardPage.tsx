@@ -250,7 +250,7 @@ export const ManagerDashboardPage: React.FC<{ initialTab?: string }> = ({ initia
   const kycLabel = !hasKycDocument
     ? 'Not verified'
     : userAccount?.kyc.status === 'verified'
-      ? 'Verified'
+      ? 'Verified User'
       : userAccount?.kyc.status === 'pending_review'
         ? 'Pending Review'
         : 'Not verified';
@@ -592,7 +592,7 @@ export const ManagerDashboardPage: React.FC<{ initialTab?: string }> = ({ initia
                 <div>
                   <h2 className="font-display text-lg font-bold text-zinc-950">KYC &amp; Identity Verification</h2>
                   <p className="text-xs text-zinc-500 mt-1">
-                    Identity records required for protected escrow bookings and Official Fan Card issuance.
+                    KYC only marks you as a verified user of the app. A Fan Card is issued after an approved purchase.
                   </p>
                 </div>
                 <div
