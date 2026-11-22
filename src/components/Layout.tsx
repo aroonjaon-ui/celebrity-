@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Bell, Check, CheckCircle2, Globe, LogOut, Menu, Search, ShieldCheck, User, X, XCircle } from 'lucide-react';
+import { Bell, Check, CheckCircle2, Globe, LogOut, Menu, Search, User, X, XCircle } from 'lucide-react';
 import { usePlatform } from '../context/PlatformContext.tsx';
 import { useLanguage, type Language } from '../context/LanguageContext.tsx';
 import { SafeImage } from './SafeImage.tsx';
@@ -10,7 +10,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     route,
     navigate,
     workspace,
-    setWorkspaceRole,
     isAdmin,
     isAuthenticated,
     hasClientAccount,
@@ -421,26 +420,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                   </div>
                 )}
               </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5 p-1 bg-zinc-100 rounded-xl">
-            {(['client', 'manager', ...(isAdmin ? (['admin'] as const) : [])] as Array<'client' | 'manager' | 'admin'>).map(
-              (role) => (
-                <button
-                  key={role}
-                  type="button"
-                  onClick={() => setWorkspaceRole(role)}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg cursor-pointer transition-colors ${
-                    workspace.role === role
-                      ? 'bg-white text-zinc-950 shadow-sm'
-                      : 'text-zinc-500 hover:text-zinc-900'
-                  }`}
-                >
-                  {role === 'admin' && <ShieldCheck className="w-3 h-3" />}
-                  {role === 'client' ? 'Client' : role === 'manager' ? t('Dashboard') : t('Admin')}
-                </button>
-              )
             )}
           </div>
 

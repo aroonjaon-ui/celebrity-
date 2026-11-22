@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Layout } from './components/Layout.tsx';
 import { PlatformProvider, usePlatform } from './context/PlatformContext.tsx';
 import { AuthPage } from './pages/AuthPage.tsx';
@@ -19,9 +19,15 @@ import { MessagesPage } from './pages/MessagesPage.tsx';
 import { RosterPage } from './pages/RosterPage.tsx';
 
 const RouteView: React.FC = () => {
-  const { route, loading } = usePlatform();
+  const { route, loading, isAuthenticated, isAdmin, navigate } = usePlatform();
+  const isLoginRoute = route.page === 'auth' || route.page === 'admin';
+  const isBlocked = !loading && !isLoginRoute && !isAuthenticated && !isAdmin;
 
-  if (loading) {
+  useEffect(() => {
+    if (isBlocked) navigate('/auth');
+  }, [isBlocked, navigate]);
+
+  if (loading || isBlocked) {
     return (
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-16">
         <div className="space-y-4 animate-pulse">
