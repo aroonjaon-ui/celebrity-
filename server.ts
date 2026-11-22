@@ -51,7 +51,9 @@ const ESCROW_DETAILS_SECRET =
     : 'mercer-sterling-local-escrow-secret-change-me');
 const ADMIN_SESSION_MS = 8 * 60 * 60 * 1000;
 const CLIENT_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
-// Sessions live in the persisted Supabase snapshot so serverless instances share them.
+// Signed cookies keep sessions valid even if two serverless instances race while
+// writing the shared Supabase snapshot.
+const SESSION_SECRET = 'mercer-sterling-session-v4';
 
 function encryptSecret(value: string): string {
   if (!value) return '';
@@ -89,9 +91,33 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return out;
 }
 
+function signSession(payload: Record<string, unknown>): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64url');
+  return `${body}.${signature}`;
+}
+
+function readSession<T extends { exp?: number }>(token: string | undefined, kind: 'client' | 'admin'): T | null {
+  if (!token) return null;
+  const [body, signature] = token.split('.');
+  if (!body || !signature) return null;
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64url');
+  const given = Buffer.from(signature);
+  const wanted = Buffer.from(expected);
+  if (given.length !== wanted.length || !crypto.timingSafeEqual(given, wanted)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as T & { kind?: string };
+    if (payload.kind !== kind || typeof payload.exp !== 'number' || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 function isAdminRequest(req: { headers: { cookie?: string } }): boolean {
   const token = parseCookies(req.headers.cookie).ms_admin;
   if (!token) return false;
+  if (readSession(token, 'admin')) return true;
   const expires = store.adminSessions?.[token];
   if (!expires) return false;
   if (expires < Date.now()) {
@@ -135,6 +161,10 @@ async function readAdminCredential(email?: string): Promise<{ email: string; pas
 function isClientRequest(req: { headers: { cookie?: string } }): boolean {
   const token = parseCookies(req.headers.cookie).ms_client;
   if (!token) return false;
+  const signed = readSession<{ email: string }>(token, 'client');
+  if (signed?.email) {
+    return Boolean(store.userAccounts?.some((account) => account.email === signed.email));
+  }
   const expires = store.clientSessions?.[token];
   if (!expires) return false;
   if (expires < Date.now()) {
@@ -148,11 +178,14 @@ function isClientRequest(req: { headers: { cookie?: string } }): boolean {
 }
 
 function setClientSession(res: express.Response, email?: string): string {
-  const token = crypto.randomBytes(32).toString('hex');
+  const cleanEmail = email?.trim().toLowerCase() || '';
+  const token = cleanEmail
+    ? signSession({ kind: 'client', email: cleanEmail, exp: Date.now() + CLIENT_SESSION_MS })
+    : crypto.randomBytes(32).toString('hex');
   store.clientSessions = store.clientSessions || {};
   store.clientSessions[token] = Date.now() + CLIENT_SESSION_MS;
   store.clientSessionEmails = store.clientSessionEmails || {};
-  if (email) store.clientSessionEmails[token] = email.trim().toLowerCase();
+  if (cleanEmail) store.clientSessionEmails[token] = cleanEmail;
   res.append(
     'Set-Cookie',
     `ms_client=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(CLIENT_SESSION_MS / 1000)}`
@@ -161,7 +194,7 @@ function setClientSession(res: express.Response, email?: string): string {
 }
 
 function setAdminSession(res: express.Response): string {
-  const token = crypto.randomBytes(32).toString('hex');
+  const token = signSession({ kind: 'admin', exp: Date.now() + ADMIN_SESSION_MS });
   store.adminSessions = store.adminSessions || {};
   store.adminSessions[token] = Date.now() + ADMIN_SESSION_MS;
   res.setHeader(
@@ -181,6 +214,8 @@ function revokeAdminSession(req: express.Request, res: express.Response): void {
 function clientEmailForRequest(req: { headers: { cookie?: string } }): string {
   const token = parseCookies(req.headers.cookie).ms_client;
   if (!token) return '';
+  const signed = readSession<{ email: string }>(token, 'client');
+  if (signed?.email) return signed.email;
   const expires = store.clientSessions?.[token];
   if (!expires || expires < Date.now()) return '';
   return store.clientSessionEmails?.[token] || '';
@@ -958,6 +993,41 @@ function normalizeStore(parsed: StoreData): StoreData {
       clientProfile: parsed.clientProfile,
     });
   }
+
+  // The admin has its own reserved account in the registered-user list.
+  const adminEmail = 'admin@mercersterling.com';
+  if (!parsed.userAccounts.some((account) => account.email === adminEmail)) {
+    const nowIso = new Date().toISOString();
+    parsed.userAccounts.push({
+      email: adminEmail,
+      passwordHash: hashPassword(crypto.randomBytes(24).toString('hex')),
+      userAccount: {
+        ...initial.userAccount,
+        id: 'admin-account',
+        fullName: 'Platform Admin',
+        username: 'admin',
+        email: adminEmail,
+        signupDate: nowIso.slice(0, 10),
+        lastLoginAt: nowIso,
+        kyc: {
+          ...initial.userAccount.kyc,
+          status: 'unverified',
+          legalName: 'Platform Admin',
+          documentNumberMasked: '',
+          submittedAt: undefined,
+          documentFileUrl: undefined,
+        },
+        updatedAt: nowIso,
+      },
+      clientProfile: {
+        ...initial.clientProfile,
+        contactName: 'Platform Admin',
+        contactEmail: adminEmail,
+        companyName: 'Mercer & Sterling',
+      },
+    });
+  }
+
   const normalizeKyc = (account: UserAccountProfile): void => {
     if (account?.kyc && !account.kyc.documentFileUrl && account.kyc.status === 'verified') {
       account.kyc.status = 'unverified';

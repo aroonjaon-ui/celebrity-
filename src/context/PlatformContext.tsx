@@ -272,6 +272,7 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
   const authTransitionRef = useRef(false);
+  const lastBootstrapRef = useRef('');
 
   // Keep the visible workspace in sync with the server-confirmed session.
   // This stops the admin view from lingering after an account switch.
@@ -406,25 +407,45 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (!res.ok) return;
         const data = await readJsonResponse(res);
         if (!active || authTransitionRef.current) return;
-        setTalents(data.talents || []);
-        setClientProfile(data.clientProfile || null);
-        setUserAccount(data.userAccount || null);
-        setAvailability(data.availability || []);
-        setThreads(data.threads || []);
-        setMessages(data.messages || []);
-        setBookings(data.bookings || []);
-        setFanCards(data.fanCards || []);
-        setReviews(data.reviews || []);
-        setNotifications(data.notifications || []);
-        setIsAdmin(Boolean(data.isAdmin));
-        setIsAuthenticated(Boolean(data.isAuthenticated));
-        setHasClientAccount(Boolean(data.hasClientAccount));
-        setAdminSettings(data.adminSettings || null);
-        setEscrowDepositInfo(data.escrowDepositInfo || null);
-        if (data.userAccount?.fullName && workspaceRef.current.role === 'client') {
-          setWorkspace((prev) =>
-            prev.role === 'client' ? { ...prev, displayName: data.userAccount.fullName } : prev
-          );
+        const snapshotKey = JSON.stringify([
+          data.talents,
+          data.clientProfile,
+          data.userAccount,
+          data.availability,
+          data.threads,
+          data.messages,
+          data.bookings,
+          data.fanCards,
+          data.reviews,
+          data.notifications,
+          data.adminSettings,
+          data.escrowDepositInfo,
+          data.isAdmin,
+          data.isAuthenticated,
+          data.hasClientAccount,
+        ]);
+        if (snapshotKey !== lastBootstrapRef.current) {
+          lastBootstrapRef.current = snapshotKey;
+          setTalents(data.talents || []);
+          setClientProfile(data.clientProfile || null);
+          setUserAccount(data.userAccount || null);
+          setAvailability(data.availability || []);
+          setThreads(data.threads || []);
+          setMessages(data.messages || []);
+          setBookings(data.bookings || []);
+          setFanCards(data.fanCards || []);
+          setReviews(data.reviews || []);
+          setNotifications(data.notifications || []);
+          setIsAdmin(Boolean(data.isAdmin));
+          setIsAuthenticated(Boolean(data.isAuthenticated));
+          setHasClientAccount(Boolean(data.hasClientAccount));
+          setAdminSettings(data.adminSettings || null);
+          setEscrowDepositInfo(data.escrowDepositInfo || null);
+          if (data.userAccount?.fullName && workspaceRef.current.role === 'client') {
+            setWorkspace((prev) =>
+              prev.role === 'client' ? { ...prev, displayName: data.userAccount.fullName } : prev
+            );
+          }
         }
         notifyApprovalTransitions(data.bookings || [], data.fanCards || []);
       } catch (err) {

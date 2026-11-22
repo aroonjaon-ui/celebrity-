@@ -80,9 +80,31 @@ function parseCookies(header) {
   }
   return out;
 }
+function signSession(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto.createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
+  return `${body}.${signature}`;
+}
+function readSession(token, kind) {
+  if (!token) return null;
+  const [body, signature] = token.split(".");
+  if (!body || !signature) return null;
+  const expected = crypto.createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
+  const given = Buffer.from(signature);
+  const wanted = Buffer.from(expected);
+  if (given.length !== wanted.length || !crypto.timingSafeEqual(given, wanted)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    if (payload.kind !== kind || typeof payload.exp !== "number" || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
 function isAdminRequest(req) {
   const token = parseCookies(req.headers.cookie).ms_admin;
   if (!token) return false;
+  if (readSession(token, "admin")) return true;
   const expires = store.adminSessions?.[token];
   if (!expires) return false;
   if (expires < Date.now()) {
@@ -122,6 +144,10 @@ async function readAdminCredential(email) {
 function isClientRequest(req) {
   const token = parseCookies(req.headers.cookie).ms_client;
   if (!token) return false;
+  const signed = readSession(token, "client");
+  if (signed?.email) {
+    return Boolean(store.userAccounts?.some((account) => account.email === signed.email));
+  }
   const expires = store.clientSessions?.[token];
   if (!expires) return false;
   if (expires < Date.now()) {
@@ -134,11 +160,12 @@ function isClientRequest(req) {
   return true;
 }
 function setClientSession(res, email) {
-  const token = crypto.randomBytes(32).toString("hex");
+  const cleanEmail = email?.trim().toLowerCase() || "";
+  const token = cleanEmail ? signSession({ kind: "client", email: cleanEmail, exp: Date.now() + CLIENT_SESSION_MS }) : crypto.randomBytes(32).toString("hex");
   store.clientSessions = store.clientSessions || {};
   store.clientSessions[token] = Date.now() + CLIENT_SESSION_MS;
   store.clientSessionEmails = store.clientSessionEmails || {};
-  if (email) store.clientSessionEmails[token] = email.trim().toLowerCase();
+  if (cleanEmail) store.clientSessionEmails[token] = cleanEmail;
   res.append(
     "Set-Cookie",
     `ms_client=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(CLIENT_SESSION_MS / 1e3)}`
@@ -146,7 +173,7 @@ function setClientSession(res, email) {
   return token;
 }
 function setAdminSession(res) {
-  const token = crypto.randomBytes(32).toString("hex");
+  const token = signSession({ kind: "admin", exp: Date.now() + ADMIN_SESSION_MS });
   store.adminSessions = store.adminSessions || {};
   store.adminSessions[token] = Date.now() + ADMIN_SESSION_MS;
   res.setHeader(
@@ -163,6 +190,8 @@ function revokeAdminSession(req, res) {
 function clientEmailForRequest(req) {
   const token = parseCookies(req.headers.cookie).ms_client;
   if (!token) return "";
+  const signed = readSession(token, "client");
+  if (signed?.email) return signed.email;
   const expires = store.clientSessions?.[token];
   if (!expires || expires < Date.now()) return "";
   return store.clientSessionEmails?.[token] || "";
@@ -872,6 +901,38 @@ function normalizeStore(parsed) {
       passwordHash: parsed.userPasswordHash,
       userAccount: parsed.userAccount,
       clientProfile: parsed.clientProfile
+    });
+  }
+  const adminEmail = "admin@mercersterling.com";
+  if (!parsed.userAccounts.some((account) => account.email === adminEmail)) {
+    const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+    parsed.userAccounts.push({
+      email: adminEmail,
+      passwordHash: hashPassword(crypto.randomBytes(24).toString("hex")),
+      userAccount: {
+        ...initial.userAccount,
+        id: "admin-account",
+        fullName: "Platform Admin",
+        username: "admin",
+        email: adminEmail,
+        signupDate: nowIso.slice(0, 10),
+        lastLoginAt: nowIso,
+        kyc: {
+          ...initial.userAccount.kyc,
+          status: "unverified",
+          legalName: "Platform Admin",
+          documentNumberMasked: "",
+          submittedAt: void 0,
+          documentFileUrl: void 0
+        },
+        updatedAt: nowIso
+      },
+      clientProfile: {
+        ...initial.clientProfile,
+        contactName: "Platform Admin",
+        contactEmail: adminEmail,
+        companyName: "Mercer & Sterling"
+      }
     });
   }
   const normalizeKyc = (account) => {
@@ -2863,7 +2924,7 @@ async function startLocalServer() {
     console.log(`Mercer & Sterling server running on http://0.0.0.0:${PORT}`);
   });
 }
-var __filename, __dirname, PORT, DATA_DIR, STORE_PATH, RECEIPT_SECRET, ESCROW_DETAILS_SECRET, ADMIN_SESSION_MS, CLIENT_SESSION_MS, store, stateLoaded, stateDirty, invokedPath;
+var __filename, __dirname, PORT, DATA_DIR, STORE_PATH, RECEIPT_SECRET, ESCROW_DETAILS_SECRET, ADMIN_SESSION_MS, CLIENT_SESSION_MS, SESSION_SECRET, store, stateLoaded, stateDirty, invokedPath;
 var init_server = __esm({
   "server.ts"() {
     init_supabase();
@@ -2878,6 +2939,7 @@ var init_server = __esm({
     ESCROW_DETAILS_SECRET = process.env.ESCROW_DETAILS_SECRET || (process.env.PAYMENT_RECEIPT_SECRET && process.env.PAYMENT_RECEIPT_SECRET.length >= 16 ? process.env.PAYMENT_RECEIPT_SECRET : "mercer-sterling-local-escrow-secret-change-me");
     ADMIN_SESSION_MS = 8 * 60 * 60 * 1e3;
     CLIENT_SESSION_MS = 7 * 24 * 60 * 60 * 1e3;
+    SESSION_SECRET = "mercer-sterling-session-v4";
     store = createInitialStore();
     stateLoaded = false;
     stateDirty = false;
