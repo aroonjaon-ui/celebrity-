@@ -139,7 +139,7 @@ function setClientSession(res, email) {
   store.clientSessions[token] = Date.now() + CLIENT_SESSION_MS;
   store.clientSessionEmails = store.clientSessionEmails || {};
   if (email) store.clientSessionEmails[token] = email.trim().toLowerCase();
-  res.setHeader(
+  res.append(
     "Set-Cookie",
     `ms_client=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(CLIENT_SESSION_MS / 1e3)}`
   );
@@ -154,6 +154,11 @@ function setAdminSession(res) {
     `ms_admin=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(ADMIN_SESSION_MS / 1e3)}`
   );
   return token;
+}
+function revokeAdminSession(req, res) {
+  const token = parseCookies(req.headers.cookie).ms_admin;
+  if (token && store.adminSessions) delete store.adminSessions[token];
+  res.append("Set-Cookie", "ms_admin=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
 }
 function clientEmailForRequest(req) {
   const token = parseCookies(req.headers.cookie).ms_client;
@@ -1382,6 +1387,7 @@ async function createApiApp() {
     if (!store.userPasswordHash) store.userPasswordHash = record.passwordHash;
     store.userAccount = newAccount;
     store.clientProfile = newClientProfile;
+    revokeAdminSession(req, res);
     setClientSession(res, cleanEmail);
     req.activeClientEmail = cleanEmail;
     saveStore(store);
@@ -1409,6 +1415,7 @@ async function createApiApp() {
     record.userAccount.lastLoginAt = (/* @__PURE__ */ new Date()).toISOString();
     store.userAccount = record.userAccount;
     store.clientProfile = record.clientProfile;
+    revokeAdminSession(req, res);
     setClientSession(res, cleanEmail);
     req.activeClientEmail = cleanEmail;
     saveStore(store);
@@ -1420,8 +1427,9 @@ async function createApiApp() {
       if (store.clientSessions) delete store.clientSessions[token];
       if (store.clientSessionEmails) delete store.clientSessionEmails[token];
     }
+    revokeAdminSession(req, res);
     saveStore(store);
-    res.setHeader("Set-Cookie", "ms_client=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
+    res.append("Set-Cookie", "ms_client=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
     res.json({ authenticated: false });
   });
   app.get("/api/auth/session", (req, res) => {

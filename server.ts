@@ -153,7 +153,7 @@ function setClientSession(res: express.Response, email?: string): string {
   store.clientSessions[token] = Date.now() + CLIENT_SESSION_MS;
   store.clientSessionEmails = store.clientSessionEmails || {};
   if (email) store.clientSessionEmails[token] = email.trim().toLowerCase();
-  res.setHeader(
+  res.append(
     'Set-Cookie',
     `ms_client=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(CLIENT_SESSION_MS / 1000)}`
   );
@@ -169,6 +169,13 @@ function setAdminSession(res: express.Response): string {
     `ms_admin=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(ADMIN_SESSION_MS / 1000)}`
   );
   return token;
+}
+
+// Any client login/signup/switch immediately revokes admin access.
+function revokeAdminSession(req: express.Request, res: express.Response): void {
+  const token = parseCookies(req.headers.cookie).ms_admin;
+  if (token && store.adminSessions) delete store.adminSessions[token];
+  res.append('Set-Cookie', 'ms_admin=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
 }
 
 function clientEmailForRequest(req: { headers: { cookie?: string } }): string {
@@ -1566,6 +1573,7 @@ export async function createApiApp(): Promise<express.Express> {
     if (!store.userPasswordHash) store.userPasswordHash = record.passwordHash;
     store.userAccount = newAccount;
     store.clientProfile = newClientProfile;
+    revokeAdminSession(req, res);
     setClientSession(res, cleanEmail);
     (req as express.Request & { activeClientEmail?: string }).activeClientEmail = cleanEmail;
     saveStore(store);
@@ -1594,6 +1602,7 @@ export async function createApiApp(): Promise<express.Express> {
     record.userAccount.lastLoginAt = new Date().toISOString();
     store.userAccount = record.userAccount;
     store.clientProfile = record.clientProfile;
+    revokeAdminSession(req, res);
     setClientSession(res, cleanEmail);
     (req as express.Request & { activeClientEmail?: string }).activeClientEmail = cleanEmail;
     saveStore(store);
@@ -1606,8 +1615,9 @@ export async function createApiApp(): Promise<express.Express> {
       if (store.clientSessions) delete store.clientSessions[token];
       if (store.clientSessionEmails) delete store.clientSessionEmails[token];
     }
+    revokeAdminSession(req, res);
     saveStore(store);
-    res.setHeader('Set-Cookie', 'ms_client=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+    res.append('Set-Cookie', 'ms_client=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
     res.json({ authenticated: false });
   });
 

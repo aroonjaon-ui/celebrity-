@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mercer-sterling-v1';
+const CACHE_NAME = 'mercer-sterling-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

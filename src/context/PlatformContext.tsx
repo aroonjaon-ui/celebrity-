@@ -271,6 +271,18 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
+  const authTransitionRef = useRef(false);
+
+  // Keep the visible workspace in sync with the server-confirmed session.
+  // This stops the admin view from lingering after an account switch.
+  useEffect(() => {
+    if (isAdmin && workspace.role !== 'admin') {
+      setWorkspace({ role: 'admin', displayName: 'Platform Admin' });
+    } else if (!isAdmin && workspace.role === 'admin') {
+      setWorkspace({ role: 'client', displayName: clientProfile?.contactName || 'Jordan Reyes' });
+    }
+  }, [isAdmin, workspace.role, clientProfile?.contactName]);
+
   // Last approval status seen for each booking / Fan Card, used to detect
   // approved/rejected transitions between bootstrap polls.
   const approvalStatusRef = useRef<Map<string, string> | null>(null);
@@ -387,13 +399,13 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     async function fetchBootstrap() {
-      if (!active || inFlight) return;
+      if (!active || inFlight || authTransitionRef.current) return;
       inFlight = true;
       try {
         const res = await fetch('/api/bootstrap');
         if (!res.ok) return;
         const data = await readJsonResponse(res);
-        if (!active) return;
+        if (!active || authTransitionRef.current) return;
         setTalents(data.talents || []);
         setClientProfile(data.clientProfile || null);
         setUserAccount(data.userAccount || null);
@@ -471,81 +483,106 @@ export const PlatformProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const adminLogin = useCallback(
     async (email: string, password: string) => {
-      const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await readJsonResponse(res);
-      if (!res.ok) throw new Error(data.error || 'Admin login failed.');
-      setIsAdmin(true);
-      setWorkspace({ role: 'admin', displayName: 'Platform Admin' });
-      navigate('/admin');
-      pushToast('Admin Login Successful', 'Admin workspace is now active.', 'success');
+      authTransitionRef.current = true;
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await readJsonResponse(res);
+        if (!res.ok) throw new Error(data.error || 'Admin login failed.');
+        setIsAdmin(true);
+        setWorkspace({ role: 'admin', displayName: 'Platform Admin' });
+        navigate('/admin');
+        pushToast('Admin Login Successful', 'Admin workspace is now active.', 'success');
+      } finally {
+        authTransitionRef.current = false;
+      }
     },
     [navigate, pushToast]
   );
 
   const adminLogout = useCallback(async () => {
-    const res = await fetch('/api/admin/logout', { method: 'POST' });
-    const data = await readJsonResponse(res);
-    if (!res.ok) throw new Error(data.error || 'Admin logout failed.');
-    setIsAdmin(false);
-    setWorkspace({ role: 'client', displayName: clientProfile?.contactName || 'Jordan Reyes' });
-    navigate('/');
-    pushToast('Admin Logged Out', 'Admin access has been disabled.', 'info');
+    authTransitionRef.current = true;
+    try {
+      const res = await fetch('/api/admin/logout', { method: 'POST' });
+      const data = await readJsonResponse(res);
+      if (!res.ok) throw new Error(data.error || 'Admin logout failed.');
+      setIsAdmin(false);
+      setWorkspace({ role: 'client', displayName: clientProfile?.contactName || 'Jordan Reyes' });
+      navigate('/');
+      pushToast('Admin Logged Out', 'Admin access has been disabled.', 'info');
+    } finally {
+      authTransitionRef.current = false;
+    }
   }, [clientProfile?.contactName, navigate, pushToast]);
 
   const signup = useCallback(
     async (input: { fullName: string; email: string; password: string; companyName?: string }) => {
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
-      });
-      const data = await readJsonResponse(res);
-      if (!res.ok) throw new Error(data.error || 'Could not create account.');
-      setIsAuthenticated(true);
-      setHasClientAccount(true);
-      setIsAdmin(false);
-      setUserAccount(data.userAccount || null);
-      if (data.clientProfile) setClientProfile(data.clientProfile);
-      setWorkspace({ role: 'client', displayName: data.userAccount?.fullName || input.fullName });
-      navigate('/');
-      pushToast('Account Created', 'Welcome to Mercer & Sterling.', 'success');
+      authTransitionRef.current = true;
+      try {
+        const res = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(input),
+        });
+        const data = await readJsonResponse(res);
+        if (!res.ok) throw new Error(data.error || 'Could not create account.');
+        setIsAuthenticated(true);
+        setHasClientAccount(true);
+        setIsAdmin(false);
+        setUserAccount(data.userAccount || null);
+        if (data.clientProfile) setClientProfile(data.clientProfile);
+        setWorkspace({ role: 'client', displayName: data.userAccount?.fullName || input.fullName });
+        navigate('/');
+        pushToast('Account Created', 'Welcome to Mercer & Sterling.', 'success');
+      } finally {
+        authTransitionRef.current = false;
+      }
     },
     [navigate, pushToast]
   );
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await readJsonResponse(res);
-      if (!res.ok) throw new Error(data.error || 'Could not log in.');
-      setIsAuthenticated(true);
-      setHasClientAccount(true);
-      setIsAdmin(false);
-      setUserAccount(data.userAccount || null);
-      setWorkspace({ role: 'client', displayName: data.userAccount?.fullName || email });
-      navigate('/');
-      pushToast('Welcome Back', 'You are signed in.', 'success');
+      authTransitionRef.current = true;
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await readJsonResponse(res);
+        if (!res.ok) throw new Error(data.error || 'Could not log in.');
+        setIsAuthenticated(true);
+        setHasClientAccount(true);
+        setIsAdmin(false);
+        setUserAccount(data.userAccount || null);
+        setWorkspace({ role: 'client', displayName: data.userAccount?.fullName || email });
+        navigate('/');
+        pushToast('Welcome Back', 'You are signed in.', 'success');
+      } finally {
+        authTransitionRef.current = false;
+      }
     },
     [navigate, pushToast]
   );
 
   const logout = useCallback(async () => {
-    const res = await fetch('/api/auth/logout', { method: 'POST' });
-    const data = await readJsonResponse(res);
-    if (!res.ok) throw new Error(data.error || 'Could not log out.');
-    setIsAuthenticated(false);
-    setIsAdmin(false);
-    setWorkspace({ role: 'client', displayName: 'Jordan Reyes' });
-    navigate('/auth');
-    pushToast('Signed Out', 'You have been logged out.', 'info');
+    authTransitionRef.current = true;
+    try {
+      const res = await fetch('/api/auth/logout', { method: 'POST' });
+      const data = await readJsonResponse(res);
+      if (!res.ok) throw new Error(data.error || 'Could not log out.');
+      setIsAuthenticated(false);
+      setIsAdmin(false);
+      setWorkspace({ role: 'client', displayName: 'Jordan Reyes' });
+      navigate('/auth');
+      pushToast('Signed Out', 'You have been logged out.', 'info');
+    } finally {
+      authTransitionRef.current = false;
+    }
   }, [navigate, pushToast]);
 
   const updateAdminSettings = useCallback(async (patch: Partial<AdminSettings>) => {
