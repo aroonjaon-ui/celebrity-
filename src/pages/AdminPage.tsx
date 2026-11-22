@@ -216,7 +216,7 @@ export const AdminPage: React.FC = () => {
   const tabs: Array<{ id: AdminTab; label: string; icon: React.ReactNode }> = [
     { id: 'roster', label: t('Roster_Admin'), icon: <UserPlus className="w-4 h-4" /> },
     { id: 'editor', label: 'Celebrity Editor', icon: <Save className="w-4 h-4" /> },
-    { id: 'escrow', label: t('Escrow & Deposits'), icon: <ShieldCheck className="w-4 h-4" /> },
+    { id: 'escrow', label: 'Fan Card Prices & Deposits', icon: <ShieldCheck className="w-4 h-4" /> },
     { id: 'approvals', label: t('Approvals'), icon: <CheckCircle2 className="w-4 h-4" /> },
     { id: 'users', label: 'Users & KYC', icon: <Users className="w-4 h-4" /> },
     { id: 'messages', label: t('All Messages'), icon: <MessageSquare className="w-4 h-4" /> },
