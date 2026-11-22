@@ -1,17 +1,15 @@
-import { createApiApp } from '../server.ts';
-
-// Vercel Node functions pass Node-style (req, res). Build the Express app once,
-// but keep startup errors so every invocation returns readable JSON instead of
-// Vercel's generic FUNCTION_INVOCATION_FAILED page.
-let startupError: unknown = null;
-const appPromise = createApiApp().catch((err) => {
-  startupError = err;
-  console.error('API startup failed:', err);
-  return null;
-});
-
+// Vercel Node functions pass Node-style (req, res). Load the Express server
+// lazily so a module-load failure is reported as JSON instead of Vercel's
+// generic FUNCTION_INVOCATION_FAILED page.
 type VercelRequest = any;
 type VercelResponse = any;
+
+let startupError: unknown = null;
+let appPromise: Promise<any> | null = null;
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? `${err.message}\n${err.stack || ''}` : String(err);
+}
 
 function sendJson(res: VercelResponse, status: number, body: unknown): void {
   if (res.headersSent || res.writableEnded) return;
@@ -20,41 +18,49 @@ function sendJson(res: VercelResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+async function getApp(): Promise<any> {
+  if (!appPromise) {
+    appPromise = import('../server.ts')
+      .then((module) => module.createApiApp())
+      .catch((err) => {
+        startupError = err;
+        console.error('API startup failed:', err);
+        throw err;
+      });
+  }
+  return appPromise;
 }
 
 export default async (req: VercelRequest, res: VercelResponse) => {
   const url = String(req.url || '');
 
-  // Bypass startup so we can always tell whether the function itself loads.
   if (url.startsWith('/api/health') || url === '/health') {
-    sendJson(res, 200, {
-      ok: !startupError,
-      startupError: startupError ? errorMessage(startupError) : null,
-    });
+    try {
+      await getApp();
+      sendJson(res, 200, { ok: true, startupError: null });
+    } catch (err) {
+      sendJson(res, 500, { ok: false, startupError: errorMessage(err) });
+    }
     return;
   }
 
   try {
-    const app = await appPromise;
-    if (!app) throw startupError || new Error('API app failed to initialize');
+    const app = await getApp();
 
     await new Promise<void>((resolve) => {
       let done = false;
-      const timer = setTimeout(() => {
-        console.error('API invocation timed out:', url);
-        sendJson(res, 504, { error: 'The server took too long to respond. Please try again.' });
-        finish();
-      }, 9000);
-      timer.unref?.();
-
       const finish = () => {
         if (done) return;
         done = true;
         clearTimeout(timer);
         resolve();
       };
+      const timer = setTimeout(() => {
+        console.error('API invocation timed out:', url);
+        sendJson(res, 504, { error: 'The server took too long to respond. Please try again.' });
+        finish();
+      }, 9000);
+      timer.unref?.();
 
       res.once('finish', finish);
       res.once('close', finish);
@@ -76,6 +82,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       }
     });
   } catch (err) {
+    if (!startupError) startupError = err;
     console.error('API invocation failed:', err);
     sendJson(res, 500, {
       error: 'API failed to initialize. Check deployment logs.',
