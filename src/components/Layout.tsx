@@ -621,9 +621,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <button type="button" onClick={() => navigate('/messages')} className="hover:text-zinc-950 cursor-pointer">
               Messages
             </button>
-            <button type="button" onClick={() => navigate('/manager')} className="hover:text-zinc-950 cursor-pointer">
-              Dashboard
-            </button>
           </div>
         </div>
       </footer>
