@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { LogIn, ShieldCheck, UserPlus } from 'lucide-react';
 import { usePlatform } from '../context/PlatformContext.tsx';
+import { InstallAppButton } from '../components/InstallAppButton.tsx';
 
 const inputClass =
   'w-full px-3 py-2.5 text-sm bg-white border border-zinc-200 rounded-xl text-zinc-950 placeholder:text-zinc-400 focus:outline-none focus:border-zinc-950 transition-colors';
 const labelClass = 'block text-[11px] font-semibold uppercase tracking-wider text-zinc-500 mb-1.5';
 
 export const AuthPage: React.FC<{ mode: 'login' | 'signup' }> = ({ mode }) => {
-  const { signup, login, hasClientAccount, navigate, isAuthenticated } = usePlatform();
+  const { signup, login, adminLogin, hasClientAccount, navigate, isAuthenticated } = usePlatform();
   const [activeMode, setActiveMode] = useState<'login' | 'signup'>(mode);
   const [fullName, setFullName] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -31,6 +32,8 @@ export const AuthPage: React.FC<{ mode: 'login' | 'signup' }> = ({ mode }) => {
     try {
       if (activeMode === 'signup') {
         await signup({ fullName, email, password, companyName });
+      } else if (email.trim().toLowerCase() === 'admin@mercersterling.com') {
+        await adminLogin(email.trim(), password);
       } else {
         await login(email, password);
       }
@@ -156,6 +159,14 @@ export const AuthPage: React.FC<{ mode: 'login' | 'signup' }> = ({ mode }) => {
             {activeMode === 'signup' ? <UserPlus className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
             {busy ? 'Please wait…' : activeMode === 'signup' ? 'Create account' : 'Log in'}
           </button>
+          {activeMode === 'login' && (
+            <p className="mt-3 text-center text-[11px] leading-relaxed text-zinc-500">
+              Administrator? Sign in with your admin email to open the admin portal directly.
+            </p>
+          )}
+          <div className="mt-4 flex justify-center">
+            <InstallAppButton compact />
+          </div>
         </form>
       </div>
     </div>

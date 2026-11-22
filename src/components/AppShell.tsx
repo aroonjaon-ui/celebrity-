@@ -19,6 +19,7 @@ import { usePlatform } from '../context/PlatformContext.tsx';
 import { useLanguage, type Language } from '../context/LanguageContext.tsx';
 import { SafeImage } from './SafeImage.tsx';
 import { AppOverlays } from './AppOverlays.tsx';
+import { InstallAppButton } from './InstallAppButton.tsx';
 
 interface NavItem {
   label: string;
@@ -277,9 +278,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           onClick={() => go('/')}
           className="h-14 px-5 flex items-center gap-2 border-b border-zinc-100 text-left cursor-pointer"
         >
-          <span className="w-8 h-8 rounded-xl bg-zinc-950 text-[#c9a227] font-display text-sm font-bold flex items-center justify-center">
-            M
-          </span>
+          <img src="/icons/icon.svg" alt="" className="w-8 h-8 rounded-xl shrink-0" />
           <span className="font-display text-sm font-bold tracking-tight leading-none">
             Mercer <span className="text-zinc-400">&amp;</span> Sterling
           </span>
@@ -288,6 +287,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
           {navItems.map((item) => renderNavButton(item))}
         </nav>
         <div className="border-t border-zinc-100 p-3 space-y-1">
+          <InstallAppButton />
           <button
             type="button"
             onClick={() => go('/client-profile')}
@@ -460,6 +460,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
               {navItems.map((item) => renderNavButton(item))}
             </nav>
             <div className="border-t border-zinc-100 p-3 space-y-1">
+              <InstallAppButton />
               <button
                 type="button"
                 onClick={() => go('/client-profile')}

@@ -12,4 +12,17 @@ const tb=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(l
 const crc=b=>{let c=0xffffffff;for(const x of b)c=tb[(c^x)&255]^(c>>>8);return(c^0xffffffff)>>>0;};
 const ch=(t,d)=>{const tb2=Buffer.from(t),l=Buffer.alloc(4),c=Buffer.alloc(4);l.writeUInt32BE(d.length);c.writeUInt32BE(crc(Buffer.concat([tb2,d])));return Buffer.concat([l,tb2,d,c]);};
 const render=s=>{const raw=Buffer.alloc((s*4+1)*s),px=1/s,cv=d=>cl(.5-d/(px*1.4),0,1);for(let y=0;y<s;y++){const row=y*(s*4+1);raw[row]=0;const cy=(y+.5)/s;for(let x=0;x<s;x++){const cx=(x+.5)/s,bg=cv(rr(cx,cy,.5,.5,.5,.5,.22)),bd=cv(Math.max(rr(cx,cy,.5,.5,.455,.455,.19),-rr(cx,cy,.5,.5,.425,.425,.17)))*bg;let m=Infinity;for(const [x1,y1,x2,y2] of M)m=Math.min(m,sg(cx,cy,x1,y1,x2,y2,.042));const mk=cv(m)*bg,col=cx>.5?G:W;let r=N[0],g=N[1],b=N[2];r+=(G[0]-r)*bd;g+=(G[1]-g)*bd;b+=(G[2]-b)*bd;r+=(col[0]-r)*mk;g+=(col[1]-g)*mk;b+=(col[2]-b)*mk;const o=row+1+x*4;raw[o]=Math.round(cl(r,0,255));raw[o+1]=Math.round(cl(g,0,255));raw[o+2]=Math.round(cl(b,0,255));raw[o+3]=Math.round(bg*255);}}const h=Buffer.alloc(13);h.writeUInt32BE(s,0);h.writeUInt32BE(s,4);h[8]=8;h[9]=6;return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),ch('IHDR',h),ch('IDAT',deflateSync(raw,{level:9})),ch('IEND',Buffer.alloc(0))]);};
-mkdirSync(out,{recursive:true});for(const s of [32,180,192,512])writeFileSync(resolve(out,`icon-${s}.png`),render(s));writeFileSync(resolve(out,'icon.svg'),'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0b1220"/><rect x="24" y="24" width="464" height="464" rx="96" fill="none" stroke="#c9a227" stroke-width="12"/><g fill="none" stroke="#fff" stroke-width="20"><path d="M98 358V154l61 112 61-112v204"/></g><g fill="none" stroke="#c9a227" stroke-width="20"><path d="M374 158h-82v88h82v106h-82"/></g></svg>\n');console.log('Generated icons');
+mkdirSync(out,{recursive:true});for(const s of [32,180,192,512])writeFileSync(resolve(out,`icon-${s}.png`),render(s));writeFileSync(resolve(out,'icon.svg'),'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0b1220"/><rect x="24" y="24" width="464" height="464" rx="96" fill="none" stroke="#c9a227" stroke-width="12"/><g fill="none" stroke="#fff" stroke-width="20"><path d="M98 358V154l61 112 61-112v204"/></g><g fill="none" stroke="#c9a227" stroke-width="20"><path d="M374 158h-82v88h82v106h-82"/></g></svg>\n');const png32 = render(32);
+const icoHeader = Buffer.alloc(6);
+icoHeader.writeUInt16LE(0, 0);
+icoHeader.writeUInt16LE(1, 2);
+icoHeader.writeUInt16LE(1, 4);
+const icoEntry = Buffer.alloc(16);
+icoEntry[0] = 32;
+icoEntry[1] = 32;
+icoEntry.writeUInt16LE(1, 4);
+icoEntry.writeUInt16LE(32, 6);
+icoEntry.writeUInt32LE(png32.length, 8);
+icoEntry.writeUInt32LE(icoHeader.length + icoEntry.length, 12);
+writeFileSync(resolve(outDir, '..', 'favicon.ico'), Buffer.concat([icoHeader, icoEntry, png32]));
+console.log('Generated icons');
