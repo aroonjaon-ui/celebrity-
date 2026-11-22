@@ -8,7 +8,7 @@ const state = structuredClone(data.data);
 const testEmails = new Set(
   (state.userAccounts || [])
     .map((account) => account.email)
-    .filter((email) => /^smoke(-\d+)?@test\.com$/i.test(email) || /^smoke-\d+-\d+@test\.com$/i.test(email))
+    .filter((email) => /@test\.com$/i.test(email))
 );
 
 if (testEmails.size === 0) {
