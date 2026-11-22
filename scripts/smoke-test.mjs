@@ -1,6 +1,9 @@
 import { supabase } from '../supabase.ts';
 
 const base = 'http://127.0.0.1:3000';
+const suffix = Date.now();
+const email1 = `smoke-${suffix}-1@test.com`;
+const email2 = `smoke-${suffix}-2@test.com`;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const cookieOf = (res) => (res.headers.get('set-cookie') || '').split(';')[0];
 const post = (path, body, cookie = '') =>
@@ -33,7 +36,7 @@ try {
 
   const s1 = await post('/api/auth/signup', {
     fullName: 'Smoke One',
-    email: 'smoke1@test.com',
+    email: email1,
     password: 'smokepass123',
   });
   results.signup1 = s1.status;
@@ -41,7 +44,7 @@ try {
 
   const s2 = await post('/api/auth/signup', {
     fullName: 'Smoke Two',
-    email: 'smoke2@test.com',
+    email: email2,
     password: 'smokepass123',
   });
   results.signup2 = s2.status;
@@ -49,20 +52,20 @@ try {
 
   const duplicate = await post('/api/auth/signup', {
     fullName: 'Smoke Dup',
-    email: 'smoke1@test.com',
+    email: email1,
     password: 'smokepass123',
   });
   results.duplicateSignup = duplicate.status;
 
   const session1 = await fetch(base + '/api/auth/session', { headers: { cookie: jar1 } });
   const body1 = await session1.json();
-  results.session1 = `${session1.status}:${body1.userAccount?.email}`;
+  results.session1 = `${session1.status}:${body1.userAccount?.email || body1.email}`;
 
   const session2 = await fetch(base + '/api/auth/session', { headers: { cookie: jar2 } });
   const body2 = await session2.json();
-  results.session2 = `${session2.status}:${body2.userAccount?.email}`;
+  results.session2 = `${session2.status}:${body2.userAccount?.email || body2.email}`;
 
-  const login1 = await post('/api/auth/login', { email: 'smoke1@test.com', password: 'smokepass123' });
+  const login1 = await post('/api/auth/login', { email: email1, password: 'smokepass123' });
   results.login1 = login1.status;
 
   const adminLogin = await post('/api/admin/login', {
@@ -74,7 +77,7 @@ try {
   const support = await post('/api/support/message', {
     body: 'Smoke test support message',
     senderName: 'Smoke Tester',
-    senderEmail: 'smoke1@test.com',
+    senderEmail: email1,
   });
   results.support = support.status;
 
