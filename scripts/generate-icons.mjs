@@ -24,5 +24,5 @@ icoEntry.writeUInt16LE(1, 4);
 icoEntry.writeUInt16LE(32, 6);
 icoEntry.writeUInt32LE(png32.length, 8);
 icoEntry.writeUInt32LE(icoHeader.length + icoEntry.length, 12);
-writeFileSync(resolve(outDir, '..', 'favicon.ico'), Buffer.concat([icoHeader, icoEntry, png32]));
+writeFileSync(resolve(out, '..', 'favicon.ico'), Buffer.concat([icoHeader, icoEntry, png32]));
 console.log('Generated icons');
