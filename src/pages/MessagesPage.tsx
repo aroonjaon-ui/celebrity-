@@ -16,7 +16,7 @@ import {
 import { AvailabilityGrid } from '../components/AvailabilityGrid.tsx';
 import { SafeImage } from '../components/SafeImage.tsx';
 import { usePlatform } from '../context/PlatformContext.tsx';
-import type { AvailabilitySlot, Booking, ChatThread, FanCard, FanCardTier, Talent } from '../types.ts';
+import type { AvailabilitySlot, Booking, FanCard, FanCardTier } from '../types.ts';
 
 interface MessagesPageProps {
   initialThreadId?: string;
@@ -29,39 +29,6 @@ const FAN_CARD_TIERS: Array<{ id: FanCardTier; label: string; summary: string }>
   { id: 'platinum', label: 'Platinum Pass', summary: 'VIP lounge invitations & concierge priority' },
 ];
 
-const SUPPORT_TALENT: Talent = {
-  id: 'support',
-  slug: 'support',
-  name: 'Live Support',
-  category: 'Client Support',
-  location: '—',
-  timezone: 'UTC',
-  dailyRate: 0,
-  currency: 'USD',
-  portraitUrl: '',
-  tagline: 'Mercer & Sterling support desk',
-  biography: 'Chat directly with the Mercer & Sterling team.',
-  yearsActive: 0,
-  experience: [],
-  portfolio: [],
-  socialLinks: {},
-  engagementTypes: [],
-  representationManager: 'Mercer & Sterling',
-  responseTime: 'Usually replies quickly',
-  verified: true,
-};
-
-const SUPPORT_THREAD: ChatThread = {
-  id: 'support-thread',
-  talentId: 'support',
-  clientCompany: 'Mercer & Sterling',
-  subject: 'Mercer & Sterling Support',
-  lastMessageAt: '1970-01-01T00:00:00.000Z',
-  lastMessagePreview: 'Ask a question or request help from our team.',
-  unreadForClient: 0,
-  unreadForManager: 0,
-  unreadForAdmin: 0,
-};
 
 export const MessagesPage: React.FC<MessagesPageProps> = ({ initialThreadId, initialTalentId }) => {
   const {
@@ -125,30 +92,22 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ initialThreadId, ini
 
   const isFocusedChat = Boolean(initialThreadId || initialTalentId);
 
-  const allThreads = useMemo(
-    () => (threads.some((thread) => thread.id === SUPPORT_THREAD.id) ? threads : [SUPPORT_THREAD, ...threads]),
-    [threads]
-  );
-
   const activeThread = useMemo(() => {
     if (initialThreadId) {
-      return allThreads.find((t) => t.id === initialThreadId) || null;
+      return threads.find((t) => t.id === initialThreadId) || null;
     }
     if (initialTalentId) {
-      return allThreads.find((t) => t.talentId === initialTalentId) || null;
+      return threads.find((t) => t.talentId === initialTalentId) || null;
     }
     return null;
-  }, [allThreads, initialThreadId, initialTalentId]);
+  }, [threads, initialThreadId, initialTalentId]);
 
   const activeTalent = useMemo(() => {
     if (activeThread) {
-      return (
-        talents.find((t) => t.id === activeThread.talentId) ||
-        (activeThread.talentId === 'support' ? SUPPORT_TALENT : null)
-      );
+      return talents.find((t) => t.id === activeThread.talentId) || null;
     }
     if (initialTalentId) {
-      return talents.find((t) => t.id === initialTalentId) || (initialTalentId === 'support' ? SUPPORT_TALENT : null);
+      return talents.find((t) => t.id === initialTalentId) || null;
     }
     return null;
   }, [talents, activeThread, initialTalentId]);
@@ -364,12 +323,10 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ initialThreadId, ini
   const activeConversations = useMemo(() => {
     const q = search.trim().toLowerCase();
     const tokens = q ? q.split(/\s+/).filter(Boolean) : [];
-    return allThreads
+    return threads
       .map((thread) => ({
         thread,
-        talent:
-          talents.find((t) => t.id === thread.talentId) ||
-          (thread.talentId === 'support' ? SUPPORT_TALENT : undefined),
+        talent: talents.find((t) => t.id === thread.talentId),
       }))
       .filter((item): item is { thread: typeof item.thread; talent: NonNullable<typeof item.talent> } => {
         if (!item.talent) return false;
@@ -390,14 +347,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ initialThreadId, ini
           .toLowerCase();
         return tokens.every((tok) => haystack.includes(tok));
       });
-  }, [allThreads, talents, messages, search]);
-
-  // Open straight into a chat instead of leaving users staring at a list.
-  useEffect(() => {
-    if (!isFocusedChat && !search.trim() && activeConversations.length > 0) {
-      navigate(`/messages/${activeConversations[0].thread.id}`);
-    }
-  }, [isFocusedChat, search, activeConversations, navigate]);
+  }, [threads, talents, messages, search]);
 
   // VIEW 1: Vertical List of Messaged Celebrities Only (/messages)
   if (!isFocusedChat) {
@@ -579,10 +529,8 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ initialThreadId, ini
                   const isSystem = msg.senderRole === 'system';
                   const senderLabel = isSystem
                     ? msg.senderName
-                    : isOwn
-                      ? isAdmin
-                        ? `${msg.senderName} (you)`
-                        : 'You'
+                    : isOwn && !isAdmin
+                      ? 'You'
                       : msg.senderName;
 
                   if (isSystem) {
