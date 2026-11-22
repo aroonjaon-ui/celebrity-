@@ -145,6 +145,7 @@ export const AdminPage: React.FC = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 className={inputClass}
                 placeholder="admin@mercersterling.com"
+                autoComplete="username"
                 autoFocus
                 required
               />
@@ -161,6 +162,26 @@ export const AdminPage: React.FC = () => {
               />
             </div>
             {loginError && <p className="text-xs text-red-600">{loginError}</p>}
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-[11px] text-zinc-600">
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  Admin access:{' '}
+                  <span className="font-mono text-zinc-950">admin@mercersterling.com</span> /{' '}
+                  <span className="font-mono text-zinc-950">admin123</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('admin@mercersterling.com');
+                    setPassword('admin123');
+                    setLoginError('');
+                  }}
+                  className="shrink-0 font-semibold text-blue-600 hover:text-blue-800 cursor-pointer"
+                >
+                  Use
+                </button>
+              </div>
+            </div>
             <button
               type="submit"
               disabled={loggingIn || !email || !password}
@@ -975,7 +996,7 @@ const AdminMessagesTab: React.FC<{
 
   return (
     <section className="bg-white border border-zinc-200 rounded-3xl overflow-hidden">
-      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] h-[calc(100vh-220px)] min-h-[640px]">
+      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] h-[calc(100dvh-180px)] min-h-[520px]">
         <div className="border-r border-zinc-100 flex flex-col">
           <div className="p-4 border-b border-zinc-100">
             <input

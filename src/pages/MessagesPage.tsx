@@ -479,7 +479,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ initialThreadId, ini
       </div>
 
       {activeTalent ? (
-        <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden flex flex-col h-[calc(100vh-190px)] min-h-[640px]">
+        <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden flex flex-col h-[calc(100dvh-148px)] min-h-[520px]">
           <div className="px-6 py-4 border-b border-zinc-200 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3.5 min-w-0">
               <SafeImage
