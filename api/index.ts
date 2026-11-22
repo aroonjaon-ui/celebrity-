@@ -1,11 +1,17 @@
-// Vercel Node functions pass Node-style (req, res). Load the Express server
-// lazily so a module-load failure is reported as JSON instead of Vercel's
-// generic FUNCTION_INVOCATION_FAILED page.
+import { createApiApp } from '../server';
+
+// Vercel Node functions pass Node-style (req, res). Build the Express app once
+// and wait for the response so async Supabase writes complete before the
+// invocation ends.
 type VercelRequest = any;
 type VercelResponse = any;
 
 let startupError: unknown = null;
-let appPromise: Promise<any> | null = null;
+const appPromise = createApiApp().catch((err) => {
+  startupError = err;
+  console.error('API startup failed:', err);
+  return null;
+});
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? `${err.message}\n${err.stack || ''}` : String(err);
@@ -19,16 +25,9 @@ function sendJson(res: VercelResponse, status: number, body: unknown): void {
 }
 
 async function getApp(): Promise<any> {
-  if (!appPromise) {
-    appPromise = import('../server.ts')
-      .then((module) => module.createApiApp())
-      .catch((err) => {
-        startupError = err;
-        console.error('API startup failed:', err);
-        throw err;
-      });
-  }
-  return appPromise;
+  const app = await appPromise;
+  if (!app) throw startupError || new Error('API app failed to initialize');
+  return app;
 }
 
 export default async (req: VercelRequest, res: VercelResponse) => {

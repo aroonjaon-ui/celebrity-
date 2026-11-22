@@ -1,6 +1,6 @@
 import serverless from 'serverless-http';
 
-import { createApiApp } from '../../server.ts';
+import { createApiApp } from '../../server';
 
 // createApiApp is async (it loads state from Supabase), so build the
 // serverless-http handler once and reuse it across warm invocations.

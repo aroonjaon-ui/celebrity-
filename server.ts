@@ -8,8 +8,8 @@ import {
   SUPABASE_BUCKET,
   SUPABASE_PUBLIC_FILE_BASE,
   supabase,
-} from './supabase.ts';
-import { seedStore } from './supabase/seed-store.ts';
+} from './supabase';
+import { seedStore } from './supabase/seed-store';
 import type {
   AdminEscrowAccount,
   AdminSettings,
@@ -28,7 +28,7 @@ import type {
   SlotStatus,
   Talent,
   UserAccountProfile,
-} from './src/types.ts';
+} from './src/types';
 
 dotenv.config();
 
